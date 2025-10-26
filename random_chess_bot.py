@@ -1,46 +1,39 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import chess
 import random
 import sys
 
 board = chess.Board()
 
-def make_random_move(b: chess.Board):
-    '''Returns a random legal move'''
-    return random.choice(list(b.legal_moves))
-
-def uci(msg: str):
-    '''Returns result of UCI protocol given passed message'''
-    if msg == "uci":
-        print("id name Random Chess Bot")
-        print("id author Oscar Veliz")
-        print("uciok")
-    elif msg == "isready":
-        print("readyok")
-    elif msg.startswith("position startpos moves"):
-        board.clear()
-        board.set_fen(chess.STARTING_FEN)
-        moves = msg.split()[3:]
-        for move in moves:
-            board.push(chess.Move.from_uci(move))
-    elif msg.startswith("position fen"):
-        fen = msg.removeprefix("position fen ")
-        board.set_fen(fen)
-    elif msg.startswith("go"):
-        move = make_random_move(board) #change this
-        print(f"bestmove {move}")
-    elif msg == "quit":
-        sys.exit(0)
-    return
+for line in sys.stdin:
+    line = line.strip()
     
-def main():
-    '''Expects to forever be passed UCI messages'''
-    try:
-        while True:
-            uci(input())
-    except Exception:
-        print("Fatal Error")
-
-if __name__ == "__main__":
-    # print(sys.argv)
-    main()
+    if line == "uci":
+        print("id name Random")
+        print("uciok")
+    elif line == "isready":
+        print("readyok")
+    elif line == "ucinewgame":
+        board = chess.Board()
+    elif line.startswith("position"):
+        if "startpos" in line:
+            board = chess.Board()
+        elif "fen" in line:
+            fen_start = line.find("fen") + 4
+            fen_end = line.find("moves") if "moves" in line else len(line)
+            board = chess.Board(line[fen_start:fen_end].strip())
+        
+        if "moves" in line:
+            moves_start = line.find("moves") + 6
+            for uci in line[moves_start:].split():
+                try:
+                    board.push(chess.Move.from_uci(uci))
+                except:
+                    break
+    elif line.startswith("go"):
+        moves = list(board.legal_moves)
+        print(f"bestmove {random.choice(moves) if moves else '0000'}")
+    elif line == "quit":
+        break
+    
+    sys.stdout.flush()
