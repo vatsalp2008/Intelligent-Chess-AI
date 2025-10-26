@@ -283,4 +283,4 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 
 ---
 
-*Built with passion for AI and chess | Fall 2024*
+*Built with passion for AI and chess | Fall 2025*
