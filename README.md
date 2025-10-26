@@ -3,7 +3,6 @@
 **An intelligent chess AI implementing minimax with alpha-beta pruning, achieving 100% win rate against random opponents**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Chess](https://img.shields.io/badge/python--chess-1.11.2-orange)](https://python-chess.readthedocs.io/)
 
 ## 🏆 Performance Highlights
@@ -270,10 +269,6 @@ This project demonstrates:
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
 
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## 👨‍💻 Author
 
 **Vatsal Patel**
@@ -288,4 +283,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-*Built with passion for AI and chess | CS5100 Project | Fall 2024*
+*Built with passion for AI and chess | Fall 2024*
