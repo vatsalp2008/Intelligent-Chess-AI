@@ -151,13 +151,13 @@ def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
         game.headers["Result"] = "*"
         return "incomplete"
 
-def run_tournament(num_games=10):
+def run_tournament(num_games=10, time_per_move=1000):
     """Run a tournament between Knightmare and Random bots"""
     print("=" * 60)
     print("Simple Chess Tournament")
     print("=" * 60)
     print(f"Games to play: {num_games}")
-    print("Time per move: 1000ms")
+    print(f"Time per move: {time_per_move}ms")
     print("=" * 60)
     
     results = {"knightmare": 0, "random": 0}
@@ -191,7 +191,7 @@ def run_tournament(num_games=10):
             time.sleep(0.1)
             
             # Play game
-            result = play_game(white, black)
+            result = play_game(white, black, time_per_move=time_per_move)
             
             # Update results
             if result == "white":
