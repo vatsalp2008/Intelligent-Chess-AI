@@ -4,11 +4,11 @@ Simple tournament runner that actually works
 No dependency on chester library
 """
 
+import argparse
 import subprocess
 import chess
 import chess.pgn
 import time
-import io
 from datetime import datetime
 
 class ChessEngine:
@@ -266,20 +266,30 @@ def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn"):
     else:
         print("🤝 THE TOURNAMENT IS A DRAW! 🤝")
 
+def parse_args():
+    """Parse command line options"""
+    parser = argparse.ArgumentParser(
+        description="Run a tournament between Knightmare and the random bot"
+    )
+    parser.add_argument(
+        "games", nargs="?", type=int, default=10,
+        help="number of games to play (default: 10)"
+    )
+    parser.add_argument(
+        "--time", type=int, default=1000, metavar="MS",
+        help="thinking time per move in milliseconds (default: 1000)"
+    )
+    parser.add_argument(
+        "--pgn", default="tournament.pgn", metavar="PATH",
+        help="where to write the games (default: tournament.pgn)"
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main function"""
-    import sys
-    
-    # Get number of games from command line
-    if len(sys.argv) > 1:
-        try:
-            num_games = int(sys.argv[1])
-        except:
-            num_games = 10
-    else:
-        num_games = 10
-    
-    run_tournament(num_games)
+    args = parse_args()
+    run_tournament(args.games, time_per_move=args.time, pgn_path=args.pgn)
 
 if __name__ == "__main__":
     main()
