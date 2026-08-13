@@ -10,15 +10,19 @@ This project merges two distinct approaches to computer chess:
 
 ```
 Intelligent-Chess-AI/
-├── classic_agent/           # Knightmare Engine & Web UI
-│   ├── knightmare_bot.py    # Core Minimax Logic
-│   ├── simple_web_chess.py  # Web Interface
+├── classic_agent/            # Knightmare Engine & Web UI
+│   ├── knightmare_bot.py     # Core Minimax Logic
+│   ├── simple_web_chess.py   # Web Interface
+│   ├── simple_tournament.py  # Tournament Runner (PGN output)
+│   ├── test_evaluation.py    # Evaluation & Search Unit Tests
+│   ├── test_bots.py          # UCI Protocol Smoke Test
 │   └── ...
-├── llm_agent/               # LLM-based Bots (Ollama)
-│   ├── knightmare_llm.py    # LLM Bot Logic
+├── llm_agent/                # LLM-based Bots (Ollama)
+│   ├── knightmare_llm.py     # LLM Bot Logic
+│   ├── tournament.py         # Multi-bot Tournament
 │   └── ...
-├── requirements.txt         # Unified Dependencies
-└── README.md                # Documentation
+├── requirements.txt          # Unified Dependencies
+└── README.md                 # Documentation
 ```
 
 ## 🚀 Quick Start
@@ -40,10 +44,11 @@ Intelligent-Chess-AI/
 
 An intelligent chess AI implementing minimax with alpha-beta pruning.
 
-### key Features
+### Key Features
 *   **Strength**: Beat random bots 20/20 games.
 *   **Search**: Minimax with Alpha-Beta pruning, Iterative Deepening.
 *   **Optimizations**: Killer Moves, History Heuristic, Quiescence Search.
+*   **Evaluation**: Material, pawn advancement, piece centralization, bishop pair, mobility.
 
 ### Usage
 
@@ -64,14 +69,24 @@ python knightmare_vs_stockfish.py
 **Run Tournament**
 ```bash
 cd classic_agent
-python simple_tournament.py 20
+python simple_tournament.py 20                 # 20 games, 1s per move
+python simple_tournament.py 20 --time 500      # faster games
+python simple_tournament.py 20 --pgn games.pgn # choose the PGN output path
+```
+Every game is written to `tournament.pgn` by default so results can be replayed.
+
+**Run Tests**
+```bash
+cd classic_agent
+python -m unittest test_evaluation   # evaluation and search unit tests
+python test_bots.py                  # UCI protocol smoke test
 ```
 
 ---
 
 ## 🤖 LLM Agent (ChessGPT)
 
-an experimental agent that prompts local LLMs to play chess.
+An experimental agent that prompts local LLMs to play chess.
 
 ### Key Features
 *   **Ollama Integration**: Runs locally with models like llama3.2.
