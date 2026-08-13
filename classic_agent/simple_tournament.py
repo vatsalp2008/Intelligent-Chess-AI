@@ -160,7 +160,8 @@ def run_tournament(num_games=10):
     print("Time per move: 1000ms")
     print("=" * 60)
     
-    results = {"knightmare": 0, "random": 0, "draw": 0}
+    results = {"knightmare": 0, "random": 0}
+    draws = 0
     
     for game_num in range(1, num_games + 1):
         print(f"\nGame {game_num}/{num_games}")
@@ -207,7 +208,7 @@ def run_tournament(num_games=10):
                     results["random"] += 1
             elif result == "draw":
                 print("Result: Draw")
-                results["draw"] += 0.5
+                draws += 1
                 results["knightmare"] += 0.5
                 results["random"] += 0.5
             else:
@@ -231,8 +232,8 @@ def run_tournament(num_games=10):
     
     print(f"Knightmare: {results['knightmare']:.1f} / {num_games} ({knightmare_percentage:.1f}%)")
     print(f"Random:     {results['random']:.1f} / {num_games} ({random_percentage:.1f}%)")
-    if results["draw"] > 0:
-        print(f"Draws:      {int(results['draw'] / 0.5)} games")
+    if draws > 0:
+        print(f"Draws:      {draws} games")
     
     print("=" * 60)
     
