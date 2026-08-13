@@ -112,6 +112,20 @@ class KnightmareBot:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [m for _, m in scored]
     
+    def record_cutoff(self, board, move, depth, ply):
+        """Store a quiet move that caused a beta cutoff for later ordering"""
+        if board.is_capture(move):
+            return
+
+        killers = self.killer_moves.setdefault(ply, [])
+        if move not in killers:
+            killers.insert(0, move)
+            if len(killers) > 2:
+                killers.pop()
+
+        key = (move.from_square, move.to_square)
+        self.history_table[key] = self.history_table.get(key, 0) + depth
+
     def minimax(self, board, depth, alpha, beta, maximizing, ply=0):
         """Simplified but robust minimax"""
         self.nodes += 1
@@ -147,20 +161,7 @@ class KnightmareBot:
                 
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
-                    # Update killer moves
-                    if not board.is_capture(move):
-                        if ply not in self.killer_moves:
-                            self.killer_moves[ply] = []
-                        if move not in self.killer_moves[ply]:
-                            self.killer_moves[ply].insert(0, move)
-                            if len(self.killer_moves[ply]) > 2:
-                                self.killer_moves[ply].pop()
-                        
-                        # Update history
-                        key = (move.from_square, move.to_square)
-                        if key not in self.history_table:
-                            self.history_table[key] = 0
-                        self.history_table[key] += depth
+                    self.record_cutoff(board, move, depth, ply)
                     break
             
             return max_eval, best_move
@@ -177,20 +178,7 @@ class KnightmareBot:
                 
                 beta = min(beta, eval_score)
                 if beta <= alpha:
-                    # Update killer moves
-                    if not board.is_capture(move):
-                        if ply not in self.killer_moves:
-                            self.killer_moves[ply] = []
-                        if move not in self.killer_moves[ply]:
-                            self.killer_moves[ply].insert(0, move)
-                            if len(self.killer_moves[ply]) > 2:
-                                self.killer_moves[ply].pop()
-                        
-                        # Update history
-                        key = (move.from_square, move.to_square)
-                        if key not in self.history_table:
-                            self.history_table[key] = 0
-                        self.history_table[key] += depth
+                    self.record_cutoff(board, move, depth, ply)
                     break
             
             return min_eval, best_move
