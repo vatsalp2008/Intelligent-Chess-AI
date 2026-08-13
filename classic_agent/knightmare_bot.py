@@ -21,6 +21,9 @@ PIECE_VALUES = {
     chess.KING: 20000
 }
 
+# Extra credit for keeping both bishops
+BISHOP_PAIR_BONUS = 30
+
 class KnightmareBot:
     def __init__(self):
         self.nodes = 0
@@ -64,10 +67,16 @@ class KnightmareBot:
                 else:
                     score -= value
         
+        # Bishop pair is worth a small bonus in most positions
+        if len(board.pieces(chess.BISHOP, chess.WHITE)) >= 2:
+            score += BISHOP_PAIR_BONUS
+        if len(board.pieces(chess.BISHOP, chess.BLACK)) >= 2:
+            score -= BISHOP_PAIR_BONUS
+
         # Mobility bonus
         mobility = len(list(board.legal_moves)) * 3
         score += mobility if board.turn == chess.WHITE else -mobility
-        
+
         return score
     
     def order_moves(self, board, moves, ply=0):
