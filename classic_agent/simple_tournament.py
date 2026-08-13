@@ -89,7 +89,11 @@ class ChessEngine:
                 self.process.kill()
 
 def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
-    """Play a single game between two engines"""
+    """Play a single game between two engines
+
+    Returns a (result, game) tuple where result is one of
+    "white", "black", "draw" or "incomplete" and game is the PGN record.
+    """
     board = chess.Board()
     game = chess.pgn.Game()
     game.headers["White"] = white_engine.name
@@ -130,28 +134,40 @@ def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
     if board.is_checkmate():
         if board.turn == chess.WHITE:
             game.headers["Result"] = "0-1"
-            return "black"
+            return "black", game
         else:
             game.headers["Result"] = "1-0"
-            return "white"
+            return "white", game
     elif board.is_stalemate():
         game.headers["Result"] = "1/2-1/2"
-        return "draw"
+        return "draw", game
     elif board.is_insufficient_material():
         game.headers["Result"] = "1/2-1/2"
-        return "draw"
+        return "draw", game
     elif board.can_claim_fifty_moves():
         game.headers["Result"] = "1/2-1/2"
-        return "draw"
+        return "draw", game
     elif move_count >= max_moves:
         game.headers["Result"] = "1/2-1/2"
-        return "draw"
+        return "draw", game
     else:
         # Incomplete game
         game.headers["Result"] = "*"
-        return "incomplete"
+        return "incomplete", game
 
-def run_tournament(num_games=10, time_per_move=1000):
+def save_games(games, path):
+    """Append the played games to a PGN file"""
+    if not games:
+        return
+
+    with open(path, "w") as pgn_file:
+        for game in games:
+            print(game, file=pgn_file, end="\n\n")
+
+    print(f"\nSaved {len(games)} game(s) to {path}")
+
+
+def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn"):
     """Run a tournament between Knightmare and Random bots"""
     print("=" * 60)
     print("Simple Chess Tournament")
@@ -162,7 +178,8 @@ def run_tournament(num_games=10, time_per_move=1000):
     
     results = {"knightmare": 0, "random": 0}
     draws = 0
-    
+    games = []
+
     for game_num in range(1, num_games + 1):
         print(f"\nGame {game_num}/{num_games}")
         
@@ -191,7 +208,10 @@ def run_tournament(num_games=10, time_per_move=1000):
             time.sleep(0.1)
             
             # Play game
-            result = play_game(white, black, time_per_move=time_per_move)
+            result, game = play_game(white, black, time_per_move=time_per_move)
+            game.headers["Event"] = "Simple Chess Tournament"
+            game.headers["Round"] = str(game_num)
+            games.append(game)
             
             # Update results
             if result == "white":
@@ -222,6 +242,8 @@ def run_tournament(num_games=10, time_per_move=1000):
             white.quit()
             black.quit()
     
+    save_games(games, pgn_path)
+
     # Print final results
     print("\n" + "=" * 60)
     print("FINAL RESULTS")
