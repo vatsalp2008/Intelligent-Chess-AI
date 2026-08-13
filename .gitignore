@@ -10,3 +10,6 @@ __pycache__
 /idea/*
 *.exe
 *.spec
+
+# macOS
+.DS_Store
