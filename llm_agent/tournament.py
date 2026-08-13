@@ -12,6 +12,13 @@ players = [
 time_control = TimeControl(initial_time=10, increment=0)
 n_games = 4
 
+# Points awarded to (white, black) for each PGN result header
+RESULT_POINTS = {
+    "1-0": (1.0, 0.0),
+    "0-1": (0.0, 1.0),
+    "1/2-1/2": (0.5, 0.5),
+}
+
 scores = {}
 game_count = {}
 
@@ -26,18 +33,23 @@ for pgn in play_tournament(players, time_control, n_games=n_games, repeat=True):
     white = pgn.headers["White"]
     black = pgn.headers["Black"]
     result = pgn.headers["Result"]
-    
+
     scores.setdefault(white, 0)
     scores.setdefault(black, 0)
     game_count.setdefault(white, 0)
     game_count.setdefault(black, 0)
-    
+
+    if result not in RESULT_POINTS:
+        # Unfinished or aborted game ("*"): does not count toward scores
+        print(f"Skipping unfinished game: {white} vs {black} ({result})")
+        continue
+
     game_count[white] += 1
     game_count[black] += 1
-    
-    results = result.split('-')
-    scores[white] += float(eval(results[0]))
-    scores[black] += float(eval(results[1]))
+
+    white_points, black_points = RESULT_POINTS[result]
+    scores[white] += white_points
+    scores[black] += black_points
 
 print("\n" + "="*60)
 print("RESULTS")
