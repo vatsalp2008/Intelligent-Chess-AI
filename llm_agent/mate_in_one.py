@@ -9,9 +9,10 @@ def find_mate_in_one(b: chess.Board):
     """Finds a mate-in-one move if available."""
     for move in b.legal_moves:
         b.push(move)
-        if b.is_checkmate():
-            return move
+        is_mate = b.is_checkmate()
         b.pop()
+        if is_mate:
+            return move
     return None
 
 def make_move(b: chess.Board):
