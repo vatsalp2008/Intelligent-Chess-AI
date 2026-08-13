@@ -22,10 +22,19 @@ def uci(msg: str):
         board.set_fen(chess.STARTING_FEN)
         moves = msg.split()[3:]
         for move in moves:
-            board.push(chess.Move.from_uci(move))
+            try:
+                parsed = chess.Move.from_uci(move)
+            except ValueError:
+                break
+            if parsed not in board.legal_moves:
+                break
+            board.push(parsed)
     elif msg.startswith("position fen"):
         fen = msg.removeprefix("position fen ")
-        board.set_fen(fen)
+        try:
+            board.set_fen(fen)
+        except ValueError:
+            board.set_fen(chess.STARTING_FEN)
     elif msg.startswith("go"):
         move = make_random_move(board) #change this
         print(f"bestmove {move}")
