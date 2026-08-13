@@ -21,15 +21,21 @@ for line in sys.stdin:
         elif "fen" in line:
             fen_start = line.find("fen") + 4
             fen_end = line.find("moves") if "moves" in line else len(line)
-            board = chess.Board(line[fen_start:fen_end].strip())
-        
+            try:
+                board = chess.Board(line[fen_start:fen_end].strip())
+            except ValueError:
+                board = chess.Board()
+
         if "moves" in line:
             moves_start = line.find("moves") + 6
             for uci in line[moves_start:].split():
                 try:
-                    board.push(chess.Move.from_uci(uci))
-                except:
+                    move = chess.Move.from_uci(uci)
+                except ValueError:
                     break
+                if move not in board.legal_moves:
+                    break
+                board.push(move)
     elif line.startswith("go"):
         moves = list(board.legal_moves)
         print(f"bestmove {random.choice(moves) if moves else '0000'}")
