@@ -47,6 +47,14 @@ stockfish_engine = None
 stockfish_level = 1  # 1-20 (1 is easiest)
 stockfish_time = 0.1  # Time in seconds for Stockfish to think
 
+# Range Stockfish accepts for its Skill Level option
+MIN_SKILL_LEVEL = 0
+MAX_SKILL_LEVEL = 20
+
+# Sensible bounds for per-move thinking time, in seconds
+MIN_THINK_TIME = 0.01
+MAX_THINK_TIME = 10.0
+
 def find_stockfish():
     """Try to find and initialize Stockfish"""
     global stockfish_engine
@@ -581,17 +589,47 @@ def new_game():
 
 @app.route('/set_stockfish_level', methods=['POST'])
 def set_stockfish_level():
+    """Set Stockfish skill level, rejecting values it would not accept
+
+    An out-of-range level makes engine.configure() raise, which used to
+    leave the opponent quietly playing random moves instead.
+    """
     global stockfish_level
-    data = request.get_json()
-    stockfish_level = data.get('level', 1)
-    return jsonify({'success': True})
+
+    data = request.get_json(silent=True) or {}
+    try:
+        level = int(data.get('level', MIN_SKILL_LEVEL))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'level must be a number'}), 400
+
+    if not MIN_SKILL_LEVEL <= level <= MAX_SKILL_LEVEL:
+        return jsonify({
+            'success': False,
+            'error': f'level must be between {MIN_SKILL_LEVEL} and {MAX_SKILL_LEVEL}',
+        }), 400
+
+    stockfish_level = level
+    return jsonify({'success': True, 'level': stockfish_level})
 
 @app.route('/set_stockfish_time', methods=['POST'])
 def set_stockfish_time():
+    """Set Stockfish thinking time, clamped to a sane range"""
     global stockfish_time
-    data = request.get_json()
-    stockfish_time = data.get('time', 0.1)
-    return jsonify({'success': True})
+
+    data = request.get_json(silent=True) or {}
+    try:
+        think_time = float(data.get('time', MIN_THINK_TIME))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'time must be a number'}), 400
+
+    if not MIN_THINK_TIME <= think_time <= MAX_THINK_TIME:
+        return jsonify({
+            'success': False,
+            'error': f'time must be between {MIN_THINK_TIME} and {MAX_THINK_TIME} seconds',
+        }), 400
+
+    stockfish_time = think_time
+    return jsonify({'success': True, 'time': stockfish_time})
 
 @app.route('/set_colors', methods=['POST'])
 def set_colors():
