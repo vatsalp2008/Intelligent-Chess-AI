@@ -183,16 +183,22 @@ Reply with just the move (like e2e4)."""
                 return move
             board.pop()
         
+        # Tried in order until one yields a legal move. The third element
+        # marks a strategy that needs the previous failure to prompt with,
+        # so it is skipped while there is nothing to report.
         strategies = [
-            ("standard", self.get_llm_move_standard),
-            ("feedback", None),  # Will be called with error feedback
-            ("numbered", self.get_llm_move_numbered_list),
-            ("simplified", self.get_llm_move_simplified)
+            ("standard", self.get_llm_move_standard, False),
+            ("feedback", self.get_llm_move_with_feedback, True),
+            ("numbered", self.get_llm_move_numbered_list, False),
+            ("simplified", self.get_llm_move_simplified, False),
         ]
-        
+
         last_error = None
-        
-        for attempt, (strategy_name, strategy_func) in enumerate(strategies, 1):
+
+        for attempt, (strategy_name, strategy_func, needs_error) in enumerate(strategies, 1):
+            if needs_error and not last_error:
+                continue
+
             # Another round trip would likely blow the budget
             if attempt > 1 and time.time() - start_time > max_time:
                 print(
@@ -202,16 +208,11 @@ Reply with just the move (like e2e4)."""
                 break
 
             try:
-                # Special handling for feedback strategy
-                if strategy_name == "feedback" and last_error:
-                    prompt, llm_output = self.get_llm_move_with_feedback(
-                        board, legal_moves, last_error
-                    )
-                elif strategy_name == "feedback":
-                    continue  # Skip feedback on first attempt
+                if needs_error:
+                    prompt, llm_output = strategy_func(board, legal_moves, last_error)
                 else:
                     prompt, llm_output = strategy_func(board, legal_moves)
-                
+
                 # Try to parse the move
                 move, error = self.parse_move_with_recovery(llm_output, legal_moves)
                 
