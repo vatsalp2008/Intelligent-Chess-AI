@@ -42,6 +42,9 @@ DEFAULT_MOVE_TIME = 1.0
 # Longest we will ever think about a single move
 MAX_MOVE_TIME = 5.0
 
+# Assumed moves left in the game when movestogo is not supplied
+CLOCK_DIVISOR = 30
+
 # How many extra plies of captures to resolve past the main search horizon
 QUIESCENCE_DEPTH = 4
 
@@ -393,12 +396,35 @@ def token_value(parts, name):
         return None
 
 
-def parse_go(line):
+def clock_budget(parts, white_to_move):
+    """Seconds to spend from a remaining-clock style go command
+
+    Spends a modest fraction of the remaining time plus most of the
+    increment, which keeps the engine from flagging in long games.
+    """
+    remaining = token_value(parts, "wtime" if white_to_move else "btime")
+    if remaining is None:
+        return None
+
+    increment = token_value(parts, "winc" if white_to_move else "binc") or 0
+    moves_to_go = token_value(parts, "movestogo") or CLOCK_DIVISOR
+
+    budget_ms = remaining / max(1, moves_to_go) + increment * 0.8
+    # Never commit more than a fraction of what is actually left
+    budget_ms = min(budget_ms, remaining * 0.4)
+    return max(0.05, min(budget_ms / 1000.0, MAX_MOVE_TIME))
+
+
+def parse_go(line, white_to_move=True):
     """Work out a (time_limit_seconds, max_depth) budget for a go command"""
     parts = line.split()
 
     time_limit = DEFAULT_MOVE_TIME
     max_depth = DEFAULT_MAX_DEPTH
+
+    clock = clock_budget(parts, white_to_move)
+    if clock is not None:
+        time_limit = clock
 
     movetime = token_value(parts, "movetime")
     if movetime is not None:
@@ -493,7 +519,7 @@ def main():
                 board = parse_position(line)
             
             elif line.startswith("go"):
-                time_limit, max_depth = parse_go(line)
+                time_limit, max_depth = parse_go(line, board.turn == chess.WHITE)
 
                 # Get move with error handling
                 try:
