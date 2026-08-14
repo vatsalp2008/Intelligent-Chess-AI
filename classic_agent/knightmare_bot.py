@@ -27,15 +27,39 @@ BISHOP_PAIR_BONUS = 30
 # Score for a mate delivered at ply 0; deeper mates score slightly lower
 MATE_SCORE = 10000
 
+# Any score within this margin of MATE_SCORE is treated as a mate score
+MAX_PLY = 100
+
 # How many extra plies of captures to resolve past the main search horizon
 QUIESCENCE_DEPTH = 4
+
+# Transposition table entry kinds
+TT_EXACT = "exact"   # score is the true value
+TT_LOWER = "lower"   # true value is at least score (search cut off high)
+TT_UPPER = "upper"   # true value is at most score (search cut off low)
+
+# Stop growing the table past this many entries
+TT_MAX_ENTRIES = 200000
 
 class KnightmareBot:
     def __init__(self):
         self.nodes = 0
         self.killer_moves = {}
         self.history_table = {}
-        
+        self.transposition_table = {}
+
+    def store_tt(self, key, score, move, flag):
+        """Cache a search result, skipping values that do not travel well
+
+        Mate scores are relative to the ply they were found at, so caching
+        them would hand back the wrong distance somewhere else in the tree.
+        """
+        if abs(score) >= MATE_SCORE - MAX_PLY:
+            return
+        if len(self.transposition_table) >= TT_MAX_ENTRIES:
+            return
+        self.transposition_table[key] = (score, move, flag)
+
     def evaluate(self, board, ply=0):
         """Simple but reliable evaluation
 
@@ -211,37 +235,57 @@ class KnightmareBot:
         if depth == 0:
             return self.quiesce(board, alpha, beta, ply), None
 
+        # A position reached by different move orders only needs searching once.
+        # Stored scores may be bounds rather than exact values, so a cached
+        # entry is only reusable when it still settles the current window.
+        tt_key = (board._transposition_key(), depth)
+        cached = self.transposition_table.get(tt_key)
+        if cached is not None:
+            score, move, flag = cached
+            if flag == TT_EXACT:
+                return score, move
+            if flag == TT_LOWER and score >= beta:
+                return score, move
+            if flag == TT_UPPER and score <= alpha:
+                return score, move
+
         moves = list(board.legal_moves)
         if not moves:
             return self.evaluate(board, ply), None
-        
+
         # Order moves
         moves = self.order_moves(board, moves, ply)
-        
+
         # Limit moves at low depth to prevent timeout
         if depth == 1:
             moves = moves[:15]
         elif depth == 2:
             moves = moves[:20]
-        
+
         best_move = moves[0]
-        
+
+        cut_off = False
+
         if maximizing:
             max_eval = -float('inf')
             for move in moves:
                 board.push(move)
                 eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False, ply + 1)
                 board.pop()
-                
+
                 if eval_score > max_eval:
                     max_eval = eval_score
                     best_move = move
-                
+
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
                     self.record_cutoff(board, move, depth, ply)
+                    cut_off = True
                     break
-            
+
+            # An early exit means max_eval is only a lower bound on the truth
+            flag = TT_LOWER if cut_off else TT_EXACT
+            self.store_tt(tt_key, max_eval, best_move, flag)
             return max_eval, best_move
         else:
             min_eval = float('inf')
@@ -249,16 +293,20 @@ class KnightmareBot:
                 board.push(move)
                 eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True, ply + 1)
                 board.pop()
-                
+
                 if eval_score < min_eval:
                     min_eval = eval_score
                     best_move = move
-                
+
                 beta = min(beta, eval_score)
                 if beta <= alpha:
                     self.record_cutoff(board, move, depth, ply)
+                    cut_off = True
                     break
-            
+
+            # An early exit means min_eval is only an upper bound on the truth
+            flag = TT_UPPER if cut_off else TT_EXACT
+            self.store_tt(tt_key, min_eval, best_move, flag)
             return min_eval, best_move
     
     def get_move(self, board, time_limit=1.0):
