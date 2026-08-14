@@ -123,7 +123,8 @@ def main():
         ("Middle game", "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"),
         ("Endgame", "8/5k2/8/3K4/8/8/4P3/8 w - - 0 1"),
         ("Complex position", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"),
-        ("Position with Rook", "6k1/5ppp/8/8/8/8/5PPP/6KR b - - 0 1"),  # Black has Rook on g8
+        # Black is a rook down and must find a defence
+        ("Down a rook", "6k1/5ppp/8/8/8/8/5PPP/6KR b - - 0 1"),
     ]
     
     for name, fen in positions:
