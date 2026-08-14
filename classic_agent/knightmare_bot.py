@@ -371,7 +371,13 @@ class KnightmareBot:
                 
                 if move and move in legal_moves:
                     best_move = move
-                    print(f"info depth {depth} score cp {int(score)} nodes {self.nodes}", flush=True)
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    nps = int(self.nodes / max(elapsed_ms / 1000.0, 0.001))
+                    print(
+                        f"info depth {depth} score {format_score(score)} "
+                        f"nodes {self.nodes} time {elapsed_ms} nps {nps}",
+                        flush=True,
+                    )
                 
                 # Another time check
                 elapsed = time.time() - start_time
@@ -382,6 +388,19 @@ class KnightmareBot:
             print(f"info string Search error: {e}", flush=True)
         
         return best_move
+
+def format_score(score):
+    """Render a search score the way UCI expects
+
+    Mate scores are reported as a distance in moves rather than as a very
+    large centipawn value.
+    """
+    if abs(score) >= MATE_SCORE - MAX_PLY:
+        plies_to_mate = MATE_SCORE - abs(score)
+        moves_to_mate = max(1, (plies_to_mate + 1) // 2)
+        return f"mate {moves_to_mate if score > 0 else -moves_to_mate}"
+    return f"cp {int(score)}"
+
 
 def token_value(parts, name):
     """Return the integer argument following a go token, if it is present"""
