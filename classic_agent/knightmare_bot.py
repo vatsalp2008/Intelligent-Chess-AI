@@ -24,16 +24,25 @@ PIECE_VALUES = {
 # Extra credit for keeping both bishops
 BISHOP_PAIR_BONUS = 30
 
+# Score for a mate delivered at ply 0; deeper mates score slightly lower
+MATE_SCORE = 10000
+
 class KnightmareBot:
     def __init__(self):
         self.nodes = 0
         self.killer_moves = {}
         self.history_table = {}
         
-    def evaluate(self, board):
-        """Simple but reliable evaluation"""
+    def evaluate(self, board, ply=0):
+        """Simple but reliable evaluation
+
+        Mate scores shrink with ply so a quicker mate always outranks a
+        slower one, and the losing side prefers to delay mate as long as
+        possible.
+        """
         if board.is_checkmate():
-            return -10000 if board.turn else 10000
+            mate_score = MATE_SCORE - ply
+            return -mate_score if board.turn else mate_score
         if board.is_stalemate():
             return 0
         if board.is_insufficient_material():
@@ -140,11 +149,11 @@ class KnightmareBot:
         self.nodes += 1
         
         if depth == 0 or board.is_game_over():
-            return self.evaluate(board), None
-        
+            return self.evaluate(board, ply), None
+
         moves = list(board.legal_moves)
         if not moves:
-            return self.evaluate(board), None
+            return self.evaluate(board, ply), None
         
         # Order moves
         moves = self.order_moves(board, moves, ply)
