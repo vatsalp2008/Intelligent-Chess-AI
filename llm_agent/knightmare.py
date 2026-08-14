@@ -21,6 +21,14 @@ PIECE_VALUES = {
     chess.KING: 20000
 }
 
+# Transposition table entry kinds
+TT_EXACT = "exact"   # score is the true value
+TT_LOWER = "lower"   # true value is at least score (search cut off high)
+TT_UPPER = "upper"   # true value is at most score (search cut off low)
+
+# Stop growing the table past this many entries
+TT_MAX_ENTRIES = 200000
+
 # Simplified piece-square tables
 def get_piece_square_value(piece_type, square, color, endgame=False):
     """Get positional value for a piece on a square"""
@@ -81,6 +89,12 @@ class KnightmareFast:
             ],
         }
         
+    def store_tt(self, key, score, move, flag):
+        """Cache a search result, keeping the table to a sane size"""
+        if len(self.transposition_table) >= TT_MAX_ENTRIES:
+            return
+        self.transposition_table[key] = (score, move, flag)
+
     def is_endgame(self, board):
         """Determine if we're in endgame phase"""
         # Count major pieces
@@ -164,16 +178,30 @@ class KnightmareFast:
     def minimax(self, board, depth, alpha, beta, maximizing):
         """Simple minimax with alpha-beta pruning"""
         self.nodes += 1
-        
+
         # Terminal conditions
         if depth == 0 or board.is_game_over():
             return self.evaluate_board(board), None
-        
+
+        # Reuse an earlier search of this position when the stored score
+        # still decides the current window. Values from a cut-off search
+        # are only bounds, so they cannot be trusted unconditionally.
+        tt_key = (board._transposition_key(), depth)
+        cached = self.transposition_table.get(tt_key)
+        if cached is not None:
+            score, move, flag = cached
+            if flag == TT_EXACT:
+                return score, move
+            if flag == TT_LOWER and score >= beta:
+                return score, move
+            if flag == TT_UPPER and score <= alpha:
+                return score, move
+
         # Get legal moves
         moves = list(board.legal_moves)
         if not moves:
             return self.evaluate_board(board), None
-        
+
         # Order moves for better pruning
         if depth > 1:
             moves = self.order_moves(board, moves)
@@ -183,22 +211,25 @@ class KnightmareFast:
             moves = moves[:10]
         
         best_move = moves[0] if moves else None
-        
+        cut_off = False
+
         if maximizing:
             max_eval = -float('inf')
             for move in moves:
                 board.push(move)
                 eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False)
                 board.pop()
-                
+
                 if eval_score > max_eval:
                     max_eval = eval_score
                     best_move = move
-                
+
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
+                    cut_off = True
                     break
-            
+
+            self.store_tt(tt_key, max_eval, best_move, TT_LOWER if cut_off else TT_EXACT)
             return max_eval, best_move
         else:
             min_eval = float('inf')
@@ -206,15 +237,17 @@ class KnightmareFast:
                 board.push(move)
                 eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True)
                 board.pop()
-                
+
                 if eval_score < min_eval:
                     min_eval = eval_score
                     best_move = move
-                
+
                 beta = min(beta, eval_score)
                 if beta <= alpha:
+                    cut_off = True
                     break
-            
+
+            self.store_tt(tt_key, min_eval, best_move, TT_UPPER if cut_off else TT_EXACT)
             return min_eval, best_move
     
     def get_best_move(self, board, max_time=2.0):
