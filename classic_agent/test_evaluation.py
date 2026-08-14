@@ -10,7 +10,14 @@ import unittest
 
 import chess
 
-from knightmare_bot import BISHOP_PAIR_BONUS, MATE_SCORE, KnightmareBot
+from knightmare_bot import (
+    BISHOP_PAIR_BONUS,
+    MATE_SCORE,
+    TT_MAX_ENTRIES,
+    KnightmareBot,
+)
+
+INFINITY = float("inf")
 
 
 class TestEvaluation(unittest.TestCase):
@@ -136,6 +143,85 @@ class TestMoveOrdering(unittest.TestCase):
         for uci in ("e2e4", "d2d4", "g1f3", "b1c3"):
             self.bot.record_cutoff(board, chess.Move.from_uci(uci), depth=1, ply=0)
         self.assertLessEqual(len(self.bot.killer_moves[0]), 2)
+
+
+class TestQuiescence(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+        # Qxd5 wins a pawn but loses the queen to cxd5
+        self.after_bad_capture = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        self.after_bad_capture.push(chess.Move.from_uci("d1d5"))
+
+    def test_resolves_recapture_the_static_eval_misses(self):
+        static = self.bot.evaluate(self.after_bad_capture, 1)
+        quiet = self.bot.quiesce(self.after_bad_capture, -INFINITY, INFINITY, 1)
+        self.assertGreater(static, 0, "static eval should look good for White")
+        self.assertLess(quiet, static, "quiescence should see the queen falling")
+
+    def test_avoids_the_losing_capture(self):
+        board = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        self.assertNotEqual(self.bot.get_move(board, time_limit=1.0), chess.Move.from_uci("d1d5"))
+
+    def test_quiet_position_returns_static_eval(self):
+        """With no captures available there is nothing to resolve"""
+        board = chess.Board("4k3/8/8/8/8/8/8/4K3 w - - 0 1")
+        self.assertEqual(
+            self.bot.quiesce(board, -INFINITY, INFINITY, 0),
+            self.bot.evaluate(board, 0),
+        )
+
+    def test_leaves_board_unchanged(self):
+        board = chess.Board("r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4")
+        fen_before = board.fen()
+        self.bot.quiesce(board, -INFINITY, INFINITY, 0)
+        self.assertEqual(board.fen(), fen_before)
+
+
+class TestTranspositionTable(unittest.TestCase):
+    FENS = [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+        "8/5k2/8/3K4/8/8/4P3/8 w - - 0 1",
+    ]
+
+    def search(self, board, depth, use_tt):
+        bot = KnightmareBot()
+        if not use_tt:
+            bot.store_tt = lambda *args, **kwargs: None
+        score, _ = bot.minimax(board.copy(), depth, -INFINITY, INFINITY, board.turn == chess.WHITE)
+        return score, bot.nodes
+
+    def test_table_does_not_change_the_score(self):
+        """Cached bounds must only ever be reused when they are still valid"""
+        for fen in self.FENS:
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                with_tt, _ = self.search(board, 4, use_tt=True)
+                without_tt, _ = self.search(board, 4, use_tt=False)
+                self.assertEqual(with_tt, without_tt)
+
+    def test_table_saves_work(self):
+        board = chess.Board(self.FENS[0])
+        _, nodes_with = self.search(board, 4, use_tt=True)
+        _, nodes_without = self.search(board, 4, use_tt=False)
+        self.assertLess(nodes_with, nodes_without)
+
+    def test_mate_scores_are_not_cached(self):
+        """Mate scores are ply-relative and would be wrong elsewhere"""
+        bot = KnightmareBot()
+        bot.store_tt(("key",), MATE_SCORE - 3, None, "exact")
+        self.assertEqual(bot.transposition_table, {})
+
+    def test_ordinary_scores_are_cached(self):
+        bot = KnightmareBot()
+        bot.store_tt(("key",), 120, None, "exact")
+        self.assertIn(("key",), bot.transposition_table)
+
+    def test_table_stops_growing_at_the_cap(self):
+        bot = KnightmareBot()
+        bot.transposition_table = {i: (0, None, "exact") for i in range(TT_MAX_ENTRIES)}
+        bot.store_tt(("overflow",), 10, None, "exact")
+        self.assertNotIn(("overflow",), bot.transposition_table)
 
 
 class TestSearch(unittest.TestCase):
