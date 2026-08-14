@@ -10,7 +10,7 @@ import unittest
 
 import chess
 
-from knightmare_bot import BISHOP_PAIR_BONUS, KnightmareBot
+from knightmare_bot import BISHOP_PAIR_BONUS, MATE_SCORE, KnightmareBot
 
 
 class TestEvaluation(unittest.TestCase):
@@ -49,6 +49,57 @@ class TestEvaluation(unittest.TestCase):
         no_pair = chess.Board("4k3/8/8/8/8/8/8/2B1KN2 w - - 0 1")
         difference = self.bot.evaluate(pair) - self.bot.evaluate(no_pair)
         self.assertGreaterEqual(difference, BISHOP_PAIR_BONUS)
+
+
+class TestMateScoring(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+        # Black is mated; White delivered it
+        self.mated = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1")
+
+    def test_mate_is_worth_less_the_deeper_it_is(self):
+        """A mate found further away must score below a nearer one"""
+        near = self.bot.evaluate(self.mated, ply=2)
+        far = self.bot.evaluate(self.mated, ply=8)
+        self.assertGreater(near, far)
+
+    def test_mate_score_magnitude(self):
+        self.assertEqual(self.bot.evaluate(self.mated, ply=0), MATE_SCORE)
+        self.assertEqual(self.bot.evaluate(self.mated, ply=5), MATE_SCORE - 5)
+
+    def test_being_mated_is_scored_from_the_losers_view(self):
+        """White mated means a large negative score"""
+        white_mated = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4r1K1 w - - 0 1")
+        self.assertTrue(white_mated.is_checkmate())
+        self.assertEqual(white_mated.turn, chess.WHITE)
+        self.assertEqual(self.bot.evaluate(white_mated, ply=0), -MATE_SCORE)
+
+    def test_prefers_immediate_mate_over_slower_one(self):
+        """Re8# is mate now; the engine must not dawdle"""
+        board = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1")
+        self.assertEqual(self.bot.get_move(board, time_limit=1.0), chess.Move.from_uci("e1e8"))
+
+
+class TestDrawDetection(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_fifty_move_position_is_drawn(self):
+        """A big material lead is still a draw once the clock runs out"""
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 100 60")
+        self.assertEqual(self.bot.evaluate(board), 0)
+
+    def test_material_lead_scores_above_zero_before_the_clock_expires(self):
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+        self.assertGreater(self.bot.evaluate(board), 0)
+
+    def test_threefold_repetition_is_drawn(self):
+        """Shuffling in a winning position must not look winning"""
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+        for uci in ("d1d2", "e8e7", "d2d1", "e7e8") * 2:
+            board.push(chess.Move.from_uci(uci))
+        self.assertTrue(board.is_repetition(3))
+        self.assertEqual(self.bot.evaluate(board), 0)
 
 
 class TestMoveOrdering(unittest.TestCase):
