@@ -7,9 +7,13 @@ Author: Vatsal Patel
 import chess
 import sys
 import random
+import re
 import ollama
 from datetime import datetime
 import json
+
+# Source square, destination square and an optional promotion piece
+UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
 
 class KnightmareLLMRecovery:
     def __init__(self, model_name="mistral"):
@@ -127,10 +131,7 @@ Reply with just the move (like e2e4)."""
                 pass
         
         # Strategy 2: Look for 4-5 character sequences
-        import re
-        uci_pattern = r'[a-h][1-8][a-h][1-8][qrbn]?'
-        matches = re.findall(uci_pattern, llm_output.lower())
-        for match in matches:
+        for match in UCI_PATTERN.findall(llm_output.lower()):
             try:
                 move = chess.Move.from_uci(match)
                 if move in legal_moves:
