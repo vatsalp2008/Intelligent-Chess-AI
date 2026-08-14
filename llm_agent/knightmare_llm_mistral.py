@@ -8,12 +8,16 @@ import chess
 import sys
 import random
 import re
+import time
 import ollama
 from datetime import datetime
 import json
 
 # Source square, destination square and an optional promotion piece
 UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
+
+# Seconds allowed for model round trips when the host sends no movetime
+DEFAULT_MOVE_TIME = 2.0
 
 class KnightmareLLMRecovery:
     def __init__(self, model_name="mistral"):
@@ -148,7 +152,12 @@ Reply with just the move (like e2e4)."""
         return None, f"Could not parse: {llm_output[:50]}"
     
     def get_best_move(self, board, max_time=2.0):
-        """Get best move with progressive recovery strategies"""
+        """Get best move with progressive recovery strategies
+
+        Each strategy costs a full model round trip, so the remaining time
+        budget is checked before starting another one.
+        """
+        start_time = time.time()
         self.move_number += 1
         legal_moves = list(board.legal_moves)
         
@@ -184,6 +193,14 @@ Reply with just the move (like e2e4)."""
         last_error = None
         
         for attempt, (strategy_name, strategy_func) in enumerate(strategies, 1):
+            # Another round trip would likely blow the budget
+            if attempt > 1 and time.time() - start_time > max_time:
+                print(
+                    f"info string Out of time after {attempt - 1} attempt(s), "
+                    "falling back to random"
+                )
+                break
+
             try:
                 # Special handling for feedback strategy
                 if strategy_name == "feedback" and last_error:
@@ -323,7 +340,18 @@ def uci(msg):
         if global_bot is None:
             global_bot = KnightmareLLMRecovery()
         
-        move = global_bot.get_best_move(global_board, 2.0)
+        # Respect movetime when the host supplies one
+        max_time = DEFAULT_MOVE_TIME
+        parts = msg.split()
+        if "movetime" in parts:
+            idx = parts.index("movetime")
+            if idx + 1 < len(parts):
+                try:
+                    max_time = int(parts[idx + 1]) / 1000.0
+                except ValueError:
+                    pass
+
+        move = global_bot.get_best_move(global_board, max_time)
         
         if move and move in global_board.legal_moves:
             print(f"bestmove {move}")
