@@ -9,11 +9,11 @@ import chess
 import chess.svg
 import chess.engine
 import random
+import shutil
 import threading
 import time
 import sys
 import os
-import subprocess
 
 # Add the current directory to path to import knightmare_bot
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,35 +55,61 @@ MAX_SKILL_LEVEL = 20
 MIN_THINK_TIME = 0.01
 MAX_THINK_TIME = 10.0
 
+def stockfish_candidates():
+    """Paths worth trying for the Stockfish binary, best first"""
+    configured = os.environ.get("STOCKFISH_PATH")
+    if configured:
+        yield configured
+
+    # Resolving through PATH avoids launching anything just to look
+    on_path = shutil.which("stockfish")
+    if on_path:
+        yield on_path
+
+    yield from (
+        "/usr/local/bin/stockfish",     # Mac/Linux homebrew
+        "/opt/homebrew/bin/stockfish",  # Mac M1 homebrew
+        "/usr/bin/stockfish",           # Linux apt
+        "/usr/games/stockfish",         # Ubuntu/Debian
+        "C:\\Program Files\\Stockfish\\stockfish.exe",  # Windows
+    )
+
+
 def find_stockfish():
     """Try to find and initialize Stockfish"""
     global stockfish_engine
-    
-    # Common Stockfish locations
-    stockfish_paths = [
-        "stockfish",  # In PATH
-        "/usr/local/bin/stockfish",  # Mac/Linux homebrew
-        "/opt/homebrew/bin/stockfish",  # Mac M1 homebrew
-        "/usr/bin/stockfish",  # Linux apt
-        "/usr/games/stockfish",  # Ubuntu/Debian
-        "C:\\Program Files\\Stockfish\\stockfish.exe",  # Windows
-    ]
-    
-    for path in stockfish_paths:
+
+    # Drop any engine from a previous call so it is not orphaned
+    if stockfish_engine is not None:
         try:
-            # Test if stockfish exists at this path
-            result = subprocess.run([path, "help"], capture_output=True, timeout=1)
-            if result.returncode == 0 or "Stockfish" in str(result.stdout):
-                stockfish_engine = chess.engine.SimpleEngine.popen_uci(path)
-                print(f"✅ Stockfish found at: {path}")
-                return True
-        except:
+            stockfish_engine.quit()
+        except chess.engine.EngineError:
+            pass
+        stockfish_engine = None
+
+    tried = set()
+    for path in stockfish_candidates():
+        if path in tried:
             continue
-    
+        tried.add(path)
+
+        if not os.path.isfile(path):
+            continue
+
+        try:
+            stockfish_engine = chess.engine.SimpleEngine.popen_uci(path)
+        except (OSError, chess.engine.EngineError) as exc:
+            print(f"⚠️  Found {path} but could not start it: {exc}")
+            continue
+
+        print(f"✅ Stockfish found at: {path}")
+        return True
+
     print("❌ Stockfish not found. Please install it:")
     print("   Mac: brew install stockfish")
     print("   Ubuntu/Debian: sudo apt-get install stockfish")
     print("   Windows: Download from https://stockfishchess.org/download/")
+    print("   Or set STOCKFISH_PATH to the binary")
     return False
 
 def reset_game():
