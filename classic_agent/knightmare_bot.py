@@ -336,6 +336,8 @@ class KnightmareBot:
         # Clear tables if too large
         if len(self.history_table) > 5000:
             self.history_table.clear()
+        if len(self.transposition_table) >= TT_MAX_ENTRIES:
+            self.transposition_table.clear()
         self.killer_moves.clear()  # Clear each search
         
         # Iterative deepening with time control
