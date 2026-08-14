@@ -1,0 +1,11 @@
+# Minimal set needed to run the engines and their unit tests.
+#
+# The full requirements.txt pins the whole environment (Flask, matplotlib,
+# PyInstaller, Ollama) which the web UIs and LLM bots need. For working on
+# the search or running the tests, this is enough:
+#
+#     pip install -r requirements-dev.txt
+#     cd classic_agent && python -m unittest test_evaluation
+#     cd llm_agent && python -m unittest test_knightmare
+
+chess==1.11.2
