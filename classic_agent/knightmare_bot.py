@@ -30,6 +30,18 @@ MATE_SCORE = 10000
 # Any score within this margin of MATE_SCORE is treated as a mate score
 MAX_PLY = 100
 
+# Deepest iteration the search will start when no depth is requested
+DEFAULT_MAX_DEPTH = 4
+
+# Hard ceiling for an explicitly requested search depth
+MAX_SEARCH_DEPTH = 6
+
+# Seconds to think when the go command carries no time information
+DEFAULT_MOVE_TIME = 1.0
+
+# Longest we will ever think about a single move
+MAX_MOVE_TIME = 5.0
+
 # How many extra plies of captures to resolve past the main search horizon
 QUIESCENCE_DEPTH = 4
 
@@ -309,7 +321,7 @@ class KnightmareBot:
             self.store_tt(tt_key, min_eval, best_move, flag)
             return min_eval, best_move
     
-    def get_move(self, board, time_limit=1.0):
+    def get_move(self, board, time_limit=1.0, max_depth=DEFAULT_MAX_DEPTH):
         """Get best move with guaranteed return"""
         start_time = time.time()
         
@@ -342,7 +354,7 @@ class KnightmareBot:
         
         # Iterative deepening with time control
         try:
-            for depth in range(1, 5):
+            for depth in range(1, max_depth + 1):
                 self.nodes = 0
                 
                 # Time check
@@ -367,6 +379,43 @@ class KnightmareBot:
             print(f"info string Search error: {e}", flush=True)
         
         return best_move
+
+def token_value(parts, name):
+    """Return the integer argument following a go token, if it is present"""
+    if name not in parts:
+        return None
+    idx = parts.index(name)
+    if idx + 1 >= len(parts):
+        return None
+    try:
+        return int(parts[idx + 1])
+    except ValueError:
+        return None
+
+
+def parse_go(line):
+    """Work out a (time_limit_seconds, max_depth) budget for a go command"""
+    parts = line.split()
+
+    time_limit = DEFAULT_MOVE_TIME
+    max_depth = DEFAULT_MAX_DEPTH
+
+    movetime = token_value(parts, "movetime")
+    if movetime is not None:
+        time_limit = max(0.1, min(movetime / 1000.0, 5.0))
+
+    depth = token_value(parts, "depth")
+    if depth is not None and depth > 0:
+        max_depth = min(depth, MAX_SEARCH_DEPTH)
+        # An explicit depth should not be cut short by the default clock
+        if movetime is None:
+            time_limit = MAX_MOVE_TIME
+
+    if "infinite" in parts:
+        time_limit = MAX_MOVE_TIME
+
+    return time_limit, max_depth
+
 
 def parse_position(line):
     """Parse position command and return board"""
@@ -444,21 +493,12 @@ def main():
                 board = parse_position(line)
             
             elif line.startswith("go"):
-                # Parse time limit
-                time_limit = 1.0
-                parts = line.split()
-                
-                if "movetime" in parts:
-                    try:
-                        idx = parts.index("movetime")
-                        time_limit = int(parts[idx + 1]) / 1000.0
-                        time_limit = max(0.1, min(time_limit, 5.0))
-                    except:
-                        time_limit = 1.0
-                
+                time_limit, max_depth = parse_go(line)
+
                 # Get move with error handling
                 try:
-                    move = bot.get_move(board, time_limit * 0.9)  # Keep some buffer
+                    # Keep some buffer
+                    move = bot.get_move(board, time_limit * 0.9, max_depth)
                     
                     # Validate move
                     if move and move in board.legal_moves:
