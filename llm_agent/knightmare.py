@@ -263,37 +263,31 @@ class KnightmareFast:
         search_board = board.copy()
         
         best_move = legal_moves[0]  # Default to first legal move
-        best_eval = -float('inf') if board.turn == chess.WHITE else float('inf')
-        
-        # Iterative deepening
+
+        # Iterative deepening. Scores from different depths are not
+        # comparable, so always trust the deepest completed iteration
+        # rather than keeping the best-looking score seen so far.
         max_depth = 4
         for depth in range(1, max_depth + 1):
             self.nodes = 0
-            
+
             try:
                 eval_score, move = self.minimax(
-                    search_board, 
-                    depth, 
-                    -float('inf'), 
+                    search_board,
+                    depth,
+                    -float('inf'),
                     float('inf'),
                     search_board.turn == chess.WHITE
                 )
-                
+
                 # CRITICAL: Verify the returned move is legal
                 if move and move in legal_moves:
-                    if search_board.turn == chess.WHITE:
-                        if eval_score > best_eval:
-                            best_move = move
-                            best_eval = eval_score
-                    else:
-                        if eval_score < best_eval:
-                            best_move = move
-                            best_eval = eval_score
-                
+                    best_move = move
+
                 # Time check
                 if time.time() - start_time > max_time * 0.5:
                     break
-                    
+
             except Exception as e:
                 print(f"Error in minimax at depth {depth}: {e}")
                 break
