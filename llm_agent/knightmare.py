@@ -93,7 +93,13 @@ class KnightmareFast:
         return queens == 0 or (queens + rooks + minors) <= 6
     
     def evaluate_board(self, board):
-        """Simplified but robust evaluation function"""
+        """Simplified but robust evaluation function
+
+        Scores are absolute: positive favours White regardless of whose
+        turn it is. minimax() maximizes for White and minimizes for Black,
+        so a side-relative score here would flip sign every ply and make
+        the search compare incompatible numbers.
+        """
         if board.is_checkmate():
             return -30000 if board.turn else 30000
         
@@ -124,8 +130,8 @@ class KnightmareFast:
         if not board.is_game_over():
             current_mobility = len(list(board.legal_moves))
             score += current_mobility * 5 if board.turn == chess.WHITE else -current_mobility * 5
-        
-        return score if board.turn == chess.WHITE else -score
+
+        return score
     
     def order_moves(self, board, moves):
         """Simple move ordering for better alpha-beta pruning"""
