@@ -6,6 +6,7 @@ Author: Vatsal Patel
 
 import chess
 import sys
+import os
 import random
 import re
 import time
@@ -19,14 +20,33 @@ UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
 # Seconds allowed for model round trips when the host sends no movetime
 DEFAULT_MOVE_TIME = 2.0
 
+# Ollama model used unless KNIGHTMARE_MODEL says otherwise
+DEFAULT_MODEL = "mistral"
+
+
+def default_log_path():
+    """Where to write the interaction log
+
+    KNIGHTMARE_LOG_DIR keeps logs out of whichever directory the engine
+    happens to be launched from, which matters when a tournament host
+    starts it from somewhere else.
+    """
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    name = f"llm_log_recovery_{stamp}.jsonl"
+    log_dir = os.environ.get("KNIGHTMARE_LOG_DIR")
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        return os.path.join(log_dir, name)
+    return name
+
 class KnightmareLLMRecovery:
-    def __init__(self, model_name="mistral"):
-        self.model_name = model_name
+    def __init__(self, model_name=None, log_file=None):
+        self.model_name = model_name or os.environ.get("KNIGHTMARE_MODEL", DEFAULT_MODEL)
         self.max_retries = 3
-        self.log_file = f"llm_log_recovery_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+        self.log_file = log_file or default_log_path()
         self.game_number = 0
         self.move_number = 0
-        
+
     def log_interaction(self, prompt, response, move_attempted, was_valid, attempt_num, strategy, error=None):
         """Log each LLM interaction to file"""
         log_entry = {
