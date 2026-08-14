@@ -202,14 +202,15 @@ class KnightmareFast:
         if not moves:
             return self.evaluate_board(board), None
 
-        # Order moves for better pruning
-        if depth > 1:
-            moves = self.order_moves(board, moves)
-        
+        # Order moves for better pruning. This has to happen before the
+        # shallow-depth cut below, otherwise the cut keeps ten arbitrary
+        # moves and can throw the best one away.
+        moves = self.order_moves(board, moves)
+
         # Limit moves at low depths to save time
         if depth <= 2 and len(moves) > 10:
             moves = moves[:10]
-        
+
         best_move = moves[0] if moves else None
         cut_off = False
 
