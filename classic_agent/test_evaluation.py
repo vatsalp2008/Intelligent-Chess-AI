@@ -12,9 +12,16 @@ import chess
 
 from knightmare_bot import (
     BISHOP_PAIR_BONUS,
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_MOVE_TIME,
     MATE_SCORE,
+    MAX_MOVE_TIME,
+    MAX_SEARCH_DEPTH,
     TT_MAX_ENTRIES,
     KnightmareBot,
+    format_score,
+    parse_go,
+    parse_position,
 )
 
 INFINITY = float("inf")
@@ -248,6 +255,93 @@ class TestSearch(unittest.TestCase):
         board.push(chess.Move.from_uci("g8h8"))
         board.push(chess.Move.from_uci("e1e8"))
         self.assertIsNone(self.bot.get_move(board, time_limit=0.5))
+
+
+class TestGoParsing(unittest.TestCase):
+    def test_bare_go_uses_defaults(self):
+        self.assertEqual(parse_go("go"), (DEFAULT_MOVE_TIME, DEFAULT_MAX_DEPTH))
+
+    def test_movetime_is_converted_to_seconds(self):
+        self.assertEqual(parse_go("go movetime 500")[0], 0.5)
+
+    def test_movetime_is_clamped(self):
+        self.assertEqual(parse_go("go movetime 1")[0], 0.1)
+        self.assertEqual(parse_go("go movetime 99999")[0], MAX_MOVE_TIME)
+
+    def test_depth_is_honoured_and_capped(self):
+        self.assertEqual(parse_go("go depth 2")[1], 2)
+        self.assertEqual(parse_go("go depth 999")[1], MAX_SEARCH_DEPTH)
+
+    def test_movetime_wins_over_depth_clock(self):
+        """An explicit movetime still bounds an explicit depth request"""
+        self.assertEqual(parse_go("go depth 3 movetime 2000"), (2.0, 3))
+
+    def test_malformed_tokens_fall_back_to_defaults(self):
+        for line in ("go depth", "go depth abc", "go movetime", "go depth 0", "go movetime x"):
+            with self.subTest(line=line):
+                self.assertEqual(parse_go(line), (DEFAULT_MOVE_TIME, DEFAULT_MAX_DEPTH))
+
+    def test_infinite_thinks_for_the_maximum(self):
+        self.assertEqual(parse_go("go infinite")[0], MAX_MOVE_TIME)
+
+    def test_clock_is_split_across_expected_moves(self):
+        """60s with 30 moves to go is about 2s per move"""
+        self.assertAlmostEqual(parse_go("go wtime 60000 btime 60000", True)[0], 2.0, places=2)
+
+    def test_uses_the_clock_of_the_side_to_move(self):
+        line = "go wtime 300000 btime 60000"
+        white_budget = parse_go(line, white_to_move=True)[0]
+        black_budget = parse_go(line, white_to_move=False)[0]
+        self.assertGreater(white_budget, black_budget)
+
+    def test_low_clock_produces_a_short_search(self):
+        """Almost out of time means move quickly rather than flag"""
+        self.assertLess(parse_go("go wtime 2000 btime 300000", True)[0], 1.0)
+
+    def test_never_spends_most_of_the_remaining_clock(self):
+        budget = parse_go("go wtime 1000 btime 1000 movestogo 1", True)[0]
+        self.assertLessEqual(budget, 0.4)
+
+    def test_increment_is_added_to_the_budget(self):
+        without = parse_go("go wtime 60000 btime 60000", True)[0]
+        with_inc = parse_go("go wtime 60000 btime 60000 winc 5000", True)[0]
+        self.assertGreater(with_inc, without)
+
+
+class TestScoreFormatting(unittest.TestCase):
+    def test_centipawn_scores(self):
+        self.assertEqual(format_score(0), "cp 0")
+        self.assertEqual(format_score(-240), "cp -240")
+
+    def test_mate_scores_are_reported_in_moves(self):
+        self.assertEqual(format_score(MATE_SCORE), "mate 1")
+        self.assertEqual(format_score(MATE_SCORE - 3), "mate 2")
+
+    def test_getting_mated_is_negative(self):
+        self.assertTrue(format_score(-(MATE_SCORE - 3)).startswith("mate -"))
+
+
+class TestPositionParsing(unittest.TestCase):
+    def test_startpos(self):
+        self.assertEqual(parse_position("position startpos").fen(), chess.Board().fen())
+
+    def test_startpos_with_moves(self):
+        board = parse_position("position startpos moves e2e4 e7e5")
+        self.assertEqual(board.piece_at(chess.E4), chess.Piece(chess.PAWN, chess.WHITE))
+        self.assertEqual(board.piece_at(chess.E5), chess.Piece(chess.PAWN, chess.BLACK))
+
+    def test_fen_position(self):
+        fen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        self.assertEqual(parse_position(f"position fen {fen}").fen(), fen)
+
+    def test_illegal_move_stops_replay(self):
+        """A bogus move must not corrupt the board"""
+        board = parse_position("position startpos moves e2e4 e2e4")
+        self.assertEqual(board.piece_at(chess.E4), chess.Piece(chess.PAWN, chess.WHITE))
+        self.assertEqual(len(board.move_stack), 1)
+
+    def test_invalid_fen_falls_back_to_startpos(self):
+        self.assertEqual(parse_position("position fen total-nonsense").fen(), chess.Board().fen())
 
 
 if __name__ == "__main__":
