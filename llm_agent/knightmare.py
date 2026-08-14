@@ -259,7 +259,7 @@ class KnightmareFast:
         legal_moves = list(board.legal_moves)
         
         if not legal_moves:
-            print("No legal moves available!")
+            print("info string No legal moves available")
             return None
         
         if len(legal_moves) == 1:
@@ -280,7 +280,7 @@ class KnightmareFast:
             
             if book_moves:
                 chosen = random.choice(book_moves)
-                print(f"Using opening book move: {chosen}")
+                print(f"info string Using opening book move {chosen}")
                 return chosen
         
         # Check for immediate checkmate
@@ -288,7 +288,7 @@ class KnightmareFast:
             board.push(move)
             if board.is_checkmate():
                 board.pop()
-                print(f"Found checkmate: {move}")
+                print(f"info string Found checkmate {move}")
                 return move
             board.pop()
         
@@ -323,12 +323,12 @@ class KnightmareFast:
                     break
 
             except Exception as e:
-                print(f"Error in minimax at depth {depth}: {e}")
+                print(f"info string Error in minimax at depth {depth}: {e}")
                 break
         
         # FINAL SAFETY CHECK: Ensure we return a legal move
         if best_move not in legal_moves:
-            print(f"WARNING: Best move {best_move} not legal, using fallback")
+            print(f"info string Best move {best_move} not legal, using fallback")
             best_move = legal_moves[0]
         
         return best_move
@@ -343,7 +343,7 @@ def uci(msg):
     
     if msg == "uci":
         print("id name Knightmare")
-        print("id author CS5100 Student")
+        print("id author Vatsal Patel")
         print("uciok")
         sys.stdout.flush()
         
