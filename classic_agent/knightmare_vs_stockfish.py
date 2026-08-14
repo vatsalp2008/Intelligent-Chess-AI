@@ -5,6 +5,7 @@ Test your bot against the world's strongest chess engine
 """
 
 from flask import Flask, render_template_string, jsonify, request
+import argparse
 import chess
 import chess.svg
 import chess.engine
@@ -54,6 +55,9 @@ MAX_SKILL_LEVEL = 20
 # Sensible bounds for per-move thinking time, in seconds
 MIN_THINK_TIME = 0.01
 MAX_THINK_TIME = 10.0
+
+# Default port for this interface
+DEFAULT_PORT = 5002
 
 def stockfish_candidates():
     """Paths worth trying for the Stockfish binary, best first"""
@@ -735,25 +739,38 @@ def shutdown():
     stop_process_soon()
     return 'Server shutting down...'
 
+def parse_args():
+    """Parse command line options"""
+    parser = argparse.ArgumentParser(description="Web UI for Knightmare vs Stockfish")
+    parser.add_argument("--host", default="127.0.0.1", help="interface to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"port to listen on (default: {DEFAULT_PORT})")
+    parser.add_argument("--debug", action="store_true", help="run Flask in debug mode")
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = parse_args()
+
     # Initialize
     reset_game()
-    
+
     print("\n" + "="*60)
     print("Knightmare vs Stockfish Web Interface")
     print("="*60)
-    
+
     # Check for Knightmare
     if bot_class:
         print("✅ Knightmare bot loaded successfully!")
         print(f"   Bot class: {bot_class.__name__}")
     else:
         print("⚠️  Knightmare bot not found - using random moves")
-    
+
     # Check for Stockfish
     if find_stockfish():
         print("✅ Stockfish engine initialized!")
-        print(f"   Default level: {stockfish_level} (adjustable 1-20)")
+        print(f"   Default level: {stockfish_level} "
+              f"(adjustable {MIN_SKILL_LEVEL}-{MAX_SKILL_LEVEL})")
         print(f"   Default time: {stockfish_time}s per move")
     else:
         print("⚠️  Stockfish not available - opponent will use random moves")
@@ -766,18 +783,18 @@ if __name__ == '__main__':
     app.config['white_is_knightmare'] = False
     
     print("\n" + "="*60)
-    print("Open your browser to: http://localhost:5002")
+    print(f"Open your browser to: http://{args.host}:{args.port}")
     print("="*60)
     print("\nFeatures:")
-    print("• Adjustable Stockfish difficulty (1-20)")
+    print(f"• Adjustable Stockfish difficulty ({MIN_SKILL_LEVEL}-{MAX_SKILL_LEVEL})")
     print("• Configurable thinking time")
     print("• Choose who plays White/Black")
     print("• Auto-play mode")
     print("• Move history tracking")
     print("="*60 + "\n")
-    
+
     try:
-        app.run(debug=False, port=5002)
+        app.run(debug=args.debug, host=args.host, port=args.port)
     finally:
         if stockfish_engine:
             stockfish_engine.quit()

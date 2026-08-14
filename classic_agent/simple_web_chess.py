@@ -5,12 +5,15 @@ Works directly with the Knightmare bot code without UCI
 """
 
 from flask import Flask, render_template_string, jsonify, request
+import argparse
 import chess
 import chess.svg
 import random
-import time
 import sys
 import os
+
+# Default port for this interface
+DEFAULT_PORT = 5001
 
 # Add the current directory to path to import knightmare_bot
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -367,21 +370,33 @@ def make_move():
             return jsonify({'success': True})
         return jsonify({'error': str(e)})
 
+def parse_args():
+    """Parse command line options"""
+    parser = argparse.ArgumentParser(description="Web UI for Knightmare vs the random bot")
+    parser.add_argument("--host", default="127.0.0.1", help="interface to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"port to listen on (default: {DEFAULT_PORT})")
+    parser.add_argument("--debug", action="store_true", help="run Flask in debug mode")
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = parse_args()
+
     # Initialize
     reset_game()
-    
+
     print("\n" + "="*60)
     print("Simple Chess Web Interface")
     print("="*60)
-    
+
     if bot_class:
         print("✅ Knightmare bot loaded successfully!")
         print(f"   Bot class: {bot_class.__name__}")
     else:
         print("⚠️  Knightmare bot not found - using random moves")
-    
-    print("\nOpen your browser to: http://localhost:5001")
+
+    print(f"\nOpen your browser to: http://{args.host}:{args.port}")
     print("="*60 + "\n")
-    
-    app.run(debug=False, port=5001)
+
+    app.run(debug=args.debug, host=args.host, port=args.port)
