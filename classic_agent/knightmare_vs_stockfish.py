@@ -9,6 +9,7 @@ import chess
 import chess.svg
 import chess.engine
 import random
+import threading
 import time
 import sys
 import os
@@ -648,13 +649,26 @@ def make_move():
             return jsonify({'success': True})
         return jsonify({'error': str(e)})
 
+def stop_process_soon(delay=0.5):
+    """Exit once the current response has had time to reach the browser"""
+    def stopper():
+        time.sleep(delay)
+        os._exit(0)
+
+    threading.Thread(target=stopper, daemon=True).start()
+
+
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
+    """Stop the server and the Stockfish subprocess
+
+    Werkzeug removed the request-time 'werkzeug.server.shutdown' hook in
+    2.1 and offers no replacement, so shut the engine down here and then
+    stop the process from a helper thread.
+    """
     if stockfish_engine:
         stockfish_engine.quit()
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func:
-        func()
+    stop_process_soon()
     return 'Server shutting down...'
 
 if __name__ == '__main__':
