@@ -7,6 +7,24 @@ import chess
 import subprocess
 import time
 
+def wait_for(proc, token, timeout=5):
+    """Read until token appears, giving up on EOF or timeout
+
+    A dead engine leaves readline() returning '' forever, so bail out
+    rather than spinning.
+    """
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if line == "":  # pipe closed, the engine is gone
+            return None
+        if token in line:
+            return line
+
+    return None
+
+
 def test_position(bot_path, fen, expected_different=True):
     """Test if bot gives different moves for a position"""
     print(f"\nTesting position: {fen}")
@@ -26,15 +44,17 @@ def test_position(bot_path, fen, expected_different=True):
     time.sleep(0.5)
     
     # Wait for uciok
-    while True:
-        line = proc.stdout.readline()
-        if "uciok" in line:
-            break
-    
+    if wait_for(proc, "uciok") is None:
+        print("  ✗ Engine never answered 'uci' - is it crashing on startup?")
+        proc.kill()
+        return []
+
     proc.stdin.write("isready\n")
     proc.stdin.flush()
-    time.sleep(0.5)
-    proc.stdout.readline()  # readyok
+    if wait_for(proc, "readyok") is None:
+        print("  ✗ Engine never answered 'isready'")
+        proc.kill()
+        return []
     
     # Test the position multiple times
     moves = []
@@ -53,7 +73,11 @@ def test_position(bot_path, fen, expected_different=True):
         # Get response
         start = time.time()
         while time.time() - start < 2:
-            line = proc.stdout.readline().strip()
+            raw = proc.stdout.readline()
+            if raw == "":  # engine exited mid-test
+                print(f"  ✗ Engine exited during attempt {i+1}")
+                break
+            line = raw.strip()
             if line.startswith("info"):
                 print(f"  {line}")
             elif line.startswith("bestmove"):
@@ -67,7 +91,9 @@ def test_position(bot_path, fen, expected_different=True):
     proc.terminate()
     
     # Check if moves are all the same
-    if len(set(moves)) == 1:
+    if not moves:
+        print("  ✗ No moves returned at all")
+    elif len(set(moves)) == 1:
         print(f"  ⚠️ Bot keeps playing the same move: {moves[0]}")
         
         # Verify it's legal
