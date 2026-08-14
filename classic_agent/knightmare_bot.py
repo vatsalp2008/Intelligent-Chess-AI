@@ -27,6 +27,9 @@ BISHOP_PAIR_BONUS = 30
 # Score for a mate delivered at ply 0; deeper mates score slightly lower
 MATE_SCORE = 10000
 
+# How many extra plies of captures to resolve past the main search horizon
+QUIESCENCE_DEPTH = 4
+
 class KnightmareBot:
     def __init__(self):
         self.nodes = 0
@@ -150,12 +153,63 @@ class KnightmareBot:
         key = (move.from_square, move.to_square)
         self.history_table[key] = self.history_table.get(key, 0) + depth
 
+    def quiesce(self, board, alpha, beta, ply, depth=QUIESCENCE_DEPTH):
+        """Search only captures until the position is quiet
+
+        Stopping a search in the middle of a capture sequence badly
+        misjudges the position, so keep resolving captures before handing
+        the score back to the main search.
+        """
+        self.nodes += 1
+
+        if board.is_game_over():
+            return self.evaluate(board, ply)
+
+        stand_pat = self.evaluate(board, ply)
+        if depth == 0:
+            return stand_pat
+
+        white_to_move = board.turn == chess.WHITE
+
+        # The side to move can decline all captures and keep stand_pat
+        if white_to_move:
+            if stand_pat >= beta:
+                return stand_pat
+            alpha = max(alpha, stand_pat)
+        else:
+            if stand_pat <= alpha:
+                return stand_pat
+            beta = min(beta, stand_pat)
+
+        captures = [m for m in board.legal_moves if board.is_capture(m) or m.promotion]
+        if not captures:
+            return stand_pat
+
+        for move in self.order_moves(board, captures, ply):
+            board.push(move)
+            score = self.quiesce(board, alpha, beta, ply + 1, depth - 1)
+            board.pop()
+
+            if white_to_move:
+                if score >= beta:
+                    return score
+                alpha = max(alpha, score)
+            else:
+                if score <= alpha:
+                    return score
+                beta = min(beta, score)
+
+        return alpha if white_to_move else beta
+
     def minimax(self, board, depth, alpha, beta, maximizing, ply=0):
         """Simplified but robust minimax"""
         self.nodes += 1
-        
-        if depth == 0 or board.is_game_over():
+
+        if board.is_game_over():
             return self.evaluate(board, ply), None
+
+        if depth == 0:
+            return self.quiesce(board, alpha, beta, ply), None
 
         moves = list(board.legal_moves)
         if not moves:
