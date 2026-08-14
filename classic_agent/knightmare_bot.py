@@ -47,6 +47,12 @@ class KnightmareBot:
             return 0
         if board.is_insufficient_material():
             return 0
+        # Claimable draws: board.is_game_over() ignores these because they
+        # need a claim, but the search must still score them as drawn.
+        if board.halfmove_clock >= 100:
+            return 0
+        if board.is_repetition(3):
+            return 0
         
         score = 0
         
