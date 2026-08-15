@@ -56,6 +56,119 @@ TT_UPPER = "upper"   # true value is at most score (search cut off low)
 # Stop growing the table past this many entries
 TT_MAX_ENTRIES = 200000
 
+# Rooks, queens and minors left before a position counts as an endgame
+ENDGAME_PIECE_COUNT = 6
+
+# Piece-square tables, written from White's point of view with rank 8 on the
+# first row so they read like a board. Values are centipawn adjustments on
+# top of the piece value. Black looks them up through a mirrored square.
+PAWN_TABLE = [
+     0,   0,   0,   0,   0,   0,   0,   0,
+    50,  50,  50,  50,  50,  50,  50,  50,
+    10,  10,  20,  30,  30,  20,  10,  10,
+     5,   5,  10,  25,  25,  10,   5,   5,
+     0,   0,   0,  20,  20,   0,   0,   0,
+     5,  -5, -10,   0,   0, -10,  -5,   5,
+     5,  10,  10, -20, -20,  10,  10,   5,
+     0,   0,   0,   0,   0,   0,   0,   0,
+]
+
+KNIGHT_TABLE = [
+   -50, -40, -30, -30, -30, -30, -40, -50,
+   -40, -20,   0,   0,   0,   0, -20, -40,
+   -30,   0,  10,  15,  15,  10,   0, -30,
+   -30,   5,  15,  20,  20,  15,   5, -30,
+   -30,   0,  15,  20,  20,  15,   0, -30,
+   -30,   5,  10,  15,  15,  10,   5, -30,
+   -40, -20,   0,   5,   5,   0, -20, -40,
+   -50, -40, -30, -30, -30, -30, -40, -50,
+]
+
+BISHOP_TABLE = [
+   -20, -10, -10, -10, -10, -10, -10, -20,
+   -10,   0,   0,   0,   0,   0,   0, -10,
+   -10,   0,   5,  10,  10,   5,   0, -10,
+   -10,   5,   5,  10,  10,   5,   5, -10,
+   -10,   0,  10,  10,  10,  10,   0, -10,
+   -10,  10,  10,  10,  10,  10,  10, -10,
+   -10,   5,   0,   0,   0,   0,   5, -10,
+   -20, -10, -10, -10, -10, -10, -10, -20,
+]
+
+ROOK_TABLE = [
+     0,   0,   0,   0,   0,   0,   0,   0,
+     5,  10,  10,  10,  10,  10,  10,   5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+     0,   0,   0,   5,   5,   0,   0,   0,
+]
+
+QUEEN_TABLE = [
+   -20, -10, -10,  -5,  -5, -10, -10, -20,
+   -10,   0,   0,   0,   0,   0,   0, -10,
+   -10,   0,   5,   5,   5,   5,   0, -10,
+    -5,   0,   5,   5,   5,   5,   0,  -5,
+     0,   0,   5,   5,   5,   5,   0,  -5,
+   -10,   5,   5,   5,   5,   5,   0, -10,
+   -10,   0,   5,   0,   0,   0,   0, -10,
+   -20, -10, -10,  -5,  -5, -10, -10, -20,
+]
+
+# The king wants shelter early on and activity once the queens come off
+KING_MIDDLEGAME_TABLE = [
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -20, -30, -30, -40, -40, -30, -30, -20,
+   -10, -20, -20, -20, -20, -20, -20, -10,
+    20,  20,   0,   0,   0,   0,  20,  20,
+    20,  30,  10,   0,   0,  10,  30,  20,
+]
+
+KING_ENDGAME_TABLE = [
+   -50, -40, -30, -20, -20, -30, -40, -50,
+   -30, -20, -10,   0,   0, -10, -20, -30,
+   -30, -10,  20,  30,  30,  20, -10, -30,
+   -30, -10,  30,  40,  40,  30, -10, -30,
+   -30, -10,  30,  40,  40,  30, -10, -30,
+   -30, -10,  20,  30,  30,  20, -10, -30,
+   -30, -30,   0,   0,   0,   0, -30, -30,
+   -50, -30, -30, -30, -30, -30, -30, -50,
+]
+
+PIECE_SQUARE_TABLES = {
+    chess.PAWN: PAWN_TABLE,
+    chess.KNIGHT: KNIGHT_TABLE,
+    chess.BISHOP: BISHOP_TABLE,
+    chess.ROOK: ROOK_TABLE,
+    chess.QUEEN: QUEEN_TABLE,
+    chess.KING: KING_MIDDLEGAME_TABLE,
+}
+
+
+def square_index(square, color):
+    """Index into a piece-square table for the given side
+
+    The tables are written with rank 8 first, so White reads them upside
+    down and Black reads them through a vertical mirror.
+    """
+    if color == chess.WHITE:
+        return chess.square_mirror(square)
+    return square
+
+
+def piece_square_bonus(piece_type, square, color, endgame=False):
+    """Positional bonus for a piece standing on a square"""
+    if piece_type == chess.KING and endgame:
+        table = KING_ENDGAME_TABLE
+    else:
+        table = PIECE_SQUARE_TABLES[piece_type]
+    return table[square_index(square, color)]
+
 class KnightmareBot:
     def __init__(self):
         self.nodes = 0
@@ -74,6 +187,18 @@ class KnightmareBot:
         if len(self.transposition_table) >= TT_MAX_ENTRIES:
             return
         self.transposition_table[key] = (score, move, flag)
+
+    def is_endgame(self, board):
+        """True once the heavy pieces have largely left the board
+
+        The king wants shelter while queens are on and activity afterwards,
+        so this decides which king table to read.
+        """
+        if board.queens:
+            majors = chess.popcount(board.rooks | board.queens)
+            minors = chess.popcount(board.knights | board.bishops)
+            return majors + minors <= ENDGAME_PIECE_COUNT
+        return True
 
     def evaluate(self, board, ply=0):
         """Simple but reliable evaluation
@@ -97,28 +222,17 @@ class KnightmareBot:
             return 0
         
         score = 0
-        
-        # Material count
+        endgame = self.is_endgame(board)
+
+        # Material and placement
         for square in chess.SQUARES:
             piece = board.piece_at(square)
             if piece:
                 value = PIECE_VALUES[piece.piece_type]
-                
-                # Simple positional bonus
-                if piece.piece_type == chess.PAWN:
-                    rank = chess.square_rank(square)
-                    if piece.color == chess.WHITE:
-                        value += rank * 5
-                    else:
-                        value += (7 - rank) * 5
-                
-                # Center bonus for knights and bishops
-                if piece.piece_type in [chess.KNIGHT, chess.BISHOP]:
-                    file = chess.square_file(square)
-                    rank = chess.square_rank(square)
-                    center_dist = abs(3.5 - file) + abs(3.5 - rank)
-                    value += int((7 - center_dist) * 2)
-                
+                value += piece_square_bonus(
+                    piece.piece_type, square, piece.color, endgame
+                )
+
                 if piece.color == chess.WHITE:
                     score += value
                 else:
