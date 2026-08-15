@@ -14,14 +14,17 @@ from knightmare_bot import (
     BISHOP_PAIR_BONUS,
     DEFAULT_MAX_DEPTH,
     DEFAULT_MOVE_TIME,
+    KING_ENDGAME_TABLE,
     MATE_SCORE,
     MAX_MOVE_TIME,
     MAX_SEARCH_DEPTH,
+    PIECE_SQUARE_TABLES,
     TT_MAX_ENTRIES,
     KnightmareBot,
     format_score,
     parse_go,
     parse_position,
+    piece_square_bonus,
 )
 
 INFINITY = float("inf")
@@ -63,6 +66,91 @@ class TestEvaluation(unittest.TestCase):
         no_pair = chess.Board("4k3/8/8/8/8/8/8/2B1KN2 w - - 0 1")
         difference = self.bot.evaluate(pair) - self.bot.evaluate(no_pair)
         self.assertGreaterEqual(difference, BISHOP_PAIR_BONUS)
+
+
+class TestPieceSquareTables(unittest.TestCase):
+    """Table orientation is easy to get backwards, so pin it down"""
+
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_every_table_covers_the_board(self):
+        for piece_type, table in PIECE_SQUARE_TABLES.items():
+            with self.subTest(piece_type=piece_type):
+                self.assertEqual(len(table), 64)
+        self.assertEqual(len(KING_ENDGAME_TABLE), 64)
+
+    def test_knights_prefer_the_centre_to_the_rim(self):
+        centre = piece_square_bonus(chess.KNIGHT, chess.D4, chess.WHITE)
+        rim = piece_square_bonus(chess.KNIGHT, chess.A1, chess.WHITE)
+        self.assertGreater(centre, rim)
+
+    def test_advanced_pawns_score_higher(self):
+        for color, near, far in (
+            (chess.WHITE, chess.E2, chess.E7),
+            (chess.BLACK, chess.E7, chess.E2),
+        ):
+            with self.subTest(color=color):
+                self.assertGreater(
+                    piece_square_bonus(chess.PAWN, far, color),
+                    piece_square_bonus(chess.PAWN, near, color),
+                )
+
+    def test_tables_are_mirrored_for_black(self):
+        """Black on the mirrored square must score exactly as White does"""
+        for piece_type in PIECE_SQUARE_TABLES:
+            for square in (chess.A1, chess.D4, chess.G1, chess.H7, chess.C6):
+                with self.subTest(piece_type=piece_type, square=square):
+                    self.assertEqual(
+                        piece_square_bonus(piece_type, square, chess.WHITE),
+                        piece_square_bonus(piece_type, chess.square_mirror(square), chess.BLACK),
+                    )
+
+    def test_king_swaps_shelter_for_activity_in_the_endgame(self):
+        corner_mid = piece_square_bonus(chess.KING, chess.G1, chess.WHITE, endgame=False)
+        corner_end = piece_square_bonus(chess.KING, chess.G1, chess.WHITE, endgame=True)
+        centre_end = piece_square_bonus(chess.KING, chess.E4, chess.WHITE, endgame=True)
+        self.assertGreater(corner_mid, corner_end)
+        self.assertGreater(centre_end, corner_end)
+
+    def test_evaluation_is_colour_symmetric(self):
+        """A mirrored position must evaluate to exactly the opposite score"""
+        for fen in (
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+            "8/5k2/8/3K4/8/8/4P3/8 w - - 0 1",
+        ):
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                self.assertEqual(self.bot.evaluate(board), -self.bot.evaluate(board.mirror()))
+
+    def test_developed_knight_beats_undeveloped_one(self):
+        """A knight on f3 should read better than one still sat on b1
+
+        Pawns are present so the position is not written off as
+        insufficient material before the placement terms are reached.
+        """
+        developed = chess.Board("4k3/pppppppp/8/8/8/5N2/PPPPPPPP/4K3 w - - 0 1")
+        home = chess.Board("4k3/pppppppp/8/8/8/8/PPPPPPPP/1N2K3 w - - 0 1")
+        self.assertGreater(self.bot.evaluate(developed), self.bot.evaluate(home))
+
+
+class TestEndgameDetection(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_opening_is_not_an_endgame(self):
+        self.assertFalse(self.bot.is_endgame(chess.Board()))
+
+    def test_position_without_queens_is_an_endgame(self):
+        self.assertTrue(self.bot.is_endgame(chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")))
+
+    def test_queens_with_few_pieces_is_an_endgame(self):
+        self.assertTrue(self.bot.is_endgame(chess.Board("3qk3/8/8/8/8/8/8/3QK3 w - - 0 1")))
+
+    def test_queens_with_a_full_board_is_not(self):
+        fen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        self.assertFalse(self.bot.is_endgame(chess.Board(fen)))
 
 
 class TestMateScoring(unittest.TestCase):
