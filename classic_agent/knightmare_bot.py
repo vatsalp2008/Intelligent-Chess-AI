@@ -59,6 +59,10 @@ TT_MAX_ENTRIES = 200000
 # Rooks, queens and minors left before a position counts as an endgame
 ENDGAME_PIECE_COUNT = 6
 
+# Bonus for a passed pawn, indexed by how many ranks it has advanced.
+# A pawn one step from promoting is worth far more than one still at home.
+PASSED_PAWN_BONUS = [0, 10, 20, 35, 60, 100, 150, 0]
+
 # Piece-square tables, written from White's point of view with rank 8 on the
 # first row so they read like a board. Values are centipawn adjustments on
 # top of the piece value. Black looks them up through a mirrored square.
@@ -148,6 +152,27 @@ PIECE_SQUARE_TABLES = {
     chess.QUEEN: QUEEN_TABLE,
     chess.KING: KING_MIDDLEGAME_TABLE,
 }
+
+
+def is_passed_pawn(square, color, enemy_pawns):
+    """True when no enemy pawn can stop this one from promoting
+
+    That means no enemy pawn ahead of it on its own file or on either
+    adjacent file.
+    """
+    file_index = chess.square_file(square)
+    rank = chess.square_rank(square)
+
+    for enemy in enemy_pawns:
+        if abs(chess.square_file(enemy) - file_index) > 1:
+            continue
+        enemy_rank = chess.square_rank(enemy)
+        if color == chess.WHITE and enemy_rank > rank:
+            return False
+        if color == chess.BLACK and enemy_rank < rank:
+            return False
+
+    return True
 
 
 def square_index(square, color):
@@ -244,9 +269,31 @@ class KnightmareBot:
         if len(board.pieces(chess.BISHOP, chess.BLACK)) >= 2:
             score -= BISHOP_PAIR_BONUS
 
+        # Pawn structure
+        score += self.pawn_structure_score(board, chess.WHITE)
+        score -= self.pawn_structure_score(board, chess.BLACK)
+
         # Mobility bonus
         mobility = len(list(board.legal_moves)) * 3
         score += mobility if board.turn == chess.WHITE else -mobility
+
+        return score
+
+    def pawn_structure_score(self, board, color):
+        """Bonus for pawns that nothing can stop
+
+        A passer is worth more the closer it gets to promoting, so the
+        bonus is indexed by how far it has advanced.
+        """
+        score = 0
+        pawns = board.pieces(chess.PAWN, color)
+        enemy_pawns = board.pieces(chess.PAWN, not color)
+
+        for square in pawns:
+            if is_passed_pawn(square, color, enemy_pawns):
+                rank = chess.square_rank(square)
+                advanced = rank if color == chess.WHITE else 7 - rank
+                score += PASSED_PAWN_BONUS[advanced]
 
         return score
     
