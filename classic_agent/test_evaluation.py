@@ -532,6 +532,60 @@ class TestTranspositionTable(unittest.TestCase):
         self.assertNotIn(("overflow",), bot.transposition_table)
 
 
+class TestPrincipalVariation(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_pv_moves_are_legal_in_sequence(self):
+        board = chess.Board()
+        self.bot.get_move(board, 60.0, 3)
+
+        scratch = board.copy()
+        for move in self.bot.extract_pv(board, 3):
+            self.assertIn(move, scratch.legal_moves)
+            scratch.push(move)
+
+    def test_pv_starts_with_the_chosen_move(self):
+        board = chess.Board()
+        best = self.bot.get_move(board, 60.0, 3)
+        pv = self.bot.extract_pv(board, 3)
+        self.assertTrue(pv)
+        self.assertEqual(pv[0], best)
+
+    def test_pv_is_no_longer_than_the_depth(self):
+        board = chess.Board()
+        self.bot.get_move(board, 60.0, 3)
+        self.assertLessEqual(len(self.bot.extract_pv(board, 3)), 3)
+
+    def test_extraction_does_not_change_the_board(self):
+        board = chess.Board()
+        self.bot.get_move(board, 60.0, 3)
+        before = board.fen()
+        self.bot.extract_pv(board, 3)
+        self.assertEqual(board.fen(), before)
+
+    def test_empty_table_gives_an_empty_line(self):
+        self.assertEqual(self.bot.extract_pv(chess.Board(), 4), [])
+
+    def test_extraction_stops_on_a_repeated_position(self):
+        """A cycle in the table must not loop forever"""
+        board = chess.Board()
+        key = board._transposition_key()
+        # Point every depth at a move that returns to the same position type
+        for depth in range(1, 5):
+            self.bot.transposition_table[(key, depth)] = (
+                0, chess.Move.from_uci("g1f3"), "exact"
+            )
+        pv = self.bot.extract_pv(board, 4)
+        self.assertLessEqual(len(pv), 4)
+
+    def test_ignores_a_stored_move_that_is_not_legal(self):
+        board = chess.Board()
+        key = board._transposition_key()
+        self.bot.transposition_table[(key, 2)] = (0, chess.Move.from_uci("a1a8"), "exact")
+        self.assertEqual(self.bot.extract_pv(board, 2), [])
+
+
 class TestSearch(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareBot()
