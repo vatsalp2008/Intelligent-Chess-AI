@@ -6,10 +6,14 @@ Author: Vatsal Patel
 
 import chess
 import os
+import re
 import sys
 import random
 import time
 import ollama
+
+# Source square, destination square and an optional promotion piece
+UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
 
 # Ollama model used unless KNIGHTMARE_MODEL says otherwise
 DEFAULT_MODEL = "llama3.2"
@@ -22,6 +26,31 @@ MAX_MOVES_SHOWN = 15
 
 # How many times to ask before falling back to a random legal move
 MAX_ATTEMPTS = 3
+
+
+def parse_move(text, legal_moves):
+    """Pull the first legal move out of a model's reply
+
+    Scans in the order the moves appear in the text rather than in move
+    generation order, so a reply like "not e2e4, I will play d2d4" gives
+    back d2d4 instead of whichever happens to be generated first.
+    """
+    if not text:
+        return None
+
+    lowered = text.lower()
+    legal = set(legal_moves)
+
+    # Dashes are a common LLM habit: e2-e4
+    for candidate in UCI_PATTERN.findall(lowered.replace("-", "")):
+        try:
+            move = chess.Move.from_uci(candidate)
+        except ValueError:
+            continue
+        if move in legal:
+            return move
+
+    return None
 
 
 class LLMChessBot:
@@ -74,24 +103,11 @@ Reply with just the move (like e2e4)."""
 
             try:
                 response = ollama.generate(model=self.model_name, prompt=prompt)
-                llm_output = response['response'].strip().lower()
-                
-                # Look for the move in the response
-                for move in legal_moves:
-                    if str(move) in llm_output:
-                        return move
-                
-                # Try parsing first word
-                tokens = llm_output.split()
-                if tokens:
-                    move_str = tokens[0].replace('-', '').strip('.,;:')
-                    try:
-                        move = chess.Move.from_uci(move_str)
-                        if move in legal_moves:
-                            return move
-                    except:
-                        pass
-                        
+                move = parse_move(response['response'], legal_moves)
+                if move is not None:
+                    return move
+                print(f"info string Attempt {attempt+1}: no legal move in reply")
+
             except Exception as e:
                 print(f"info string Attempt {attempt+1} failed: {e}")
         
