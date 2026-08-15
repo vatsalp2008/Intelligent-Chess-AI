@@ -10,7 +10,13 @@ import re
 import sys
 import random
 import time
-import ollama
+
+try:
+    import ollama
+except ImportError:
+    # The move parsing helpers are useful (and testable) without a model
+    # server installed; only get_best_move actually needs Ollama.
+    ollama = None
 
 # Source square, destination square and an optional promotion piece
 UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
@@ -68,6 +74,10 @@ class LLMChessBot:
 
         if not legal_moves:
             return None
+
+        if ollama is None:
+            print("info string Ollama is not installed, playing randomly")
+            return random.choice(legal_moves)
 
         if len(legal_moves) == 1:
             return legal_moves[0]
