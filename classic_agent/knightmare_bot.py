@@ -315,6 +315,37 @@ class KnightmareBot:
             return
         self.transposition_table[key] = (score, move, flag)
 
+    def extract_pv(self, board, depth):
+        """Follow the stored best moves to recover the expected line
+
+        Walks the transposition table from the current position, taking the
+        best move recorded at each remaining depth. The line stops as soon
+        as an entry is missing or the move is not legal, so a partial or
+        overwritten table just yields a shorter line.
+        """
+        pv = []
+        scratch = board.copy(stack=False)
+        seen = set()
+
+        for remaining in range(depth, 0, -1):
+            key = scratch._transposition_key()
+            if key in seen:  # a repetition would loop forever
+                break
+            seen.add(key)
+
+            entry = self.transposition_table.get((key, remaining))
+            if entry is None:
+                break
+
+            move = entry[1]
+            if move is None or move not in scratch.legal_moves:
+                break
+
+            pv.append(move)
+            scratch.push(move)
+
+        return pv
+
     def is_endgame(self, board):
         """True once the heavy pieces have largely left the board
 
@@ -690,9 +721,17 @@ class KnightmareBot:
                     best_move = move
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     nps = int(self.nodes / max(elapsed_ms / 1000.0, 0.001))
+
+                    pv = self.extract_pv(board, depth)
+                    # The root move is authoritative even if the table has
+                    # since been overwritten for that position
+                    if not pv or pv[0] != move:
+                        pv = [move]
+                    pv_text = " ".join(m.uci() for m in pv)
+
                     print(
                         f"info depth {depth} score {format_score(score)} "
-                        f"nodes {self.nodes} time {elapsed_ms} nps {nps}",
+                        f"nodes {self.nodes} time {elapsed_ms} nps {nps} pv {pv_text}",
                         flush=True,
                     )
                 
