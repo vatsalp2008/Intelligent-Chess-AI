@@ -77,6 +77,9 @@ ROOK_HALF_OPEN_FILE_BONUS = 10
 
 # Values used when playing out an exchange. The king is given a huge value
 # so it is only ever used as a last resort recapture.
+# Charged per file around the king with no friendly pawn on it
+KING_SHIELD_PENALTY = 12
+
 # Captures that lose material are ordered below every quiet move
 LOSING_CAPTURE_SCORE = -1000
 
@@ -410,11 +413,38 @@ class KnightmareBot:
         score += self.rook_file_score(board, chess.WHITE)
         score -= self.rook_file_score(board, chess.BLACK)
 
+        # King shelter, which only matters while there is material to attack with
+        if not self.is_endgame(board):
+            score += self.king_safety_score(board, chess.WHITE)
+            score -= self.king_safety_score(board, chess.BLACK)
+
         # Mobility bonus
         mobility = len(list(board.legal_moves)) * 3
         score += mobility if board.turn == chess.WHITE else -mobility
 
         return score
+
+    def king_safety_score(self, board, color):
+        """Penalise a king whose pawn cover has gone
+
+        Looks at the three files around the king and charges for each one
+        with no friendly pawn on it. Only meaningful in the middlegame,
+        which the caller checks before asking.
+        """
+        king_square = board.king(color)
+        if king_square is None:
+            return 0
+
+        king_file = chess.square_file(king_square)
+        pawn_files = {chess.square_file(sq) for sq in board.pieces(chess.PAWN, color)}
+
+        missing = 0
+        for offset in (-1, 0, 1):
+            shield_file = king_file + offset
+            if 0 <= shield_file <= 7 and shield_file not in pawn_files:
+                missing += 1
+
+        return -missing * KING_SHIELD_PENALTY
 
     def rook_file_score(self, board, color):
         """Reward rooks on files their own pawns have vacated
