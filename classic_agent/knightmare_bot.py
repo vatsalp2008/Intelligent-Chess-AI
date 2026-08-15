@@ -588,12 +588,6 @@ class KnightmareBot:
         # Order moves
         moves = self.order_moves(board, moves, ply)
 
-        # Limit moves at low depth to prevent timeout
-        if depth == 1:
-            moves = moves[:15]
-        elif depth == 2:
-            moves = moves[:20]
-
         best_move = moves[0]
 
         cut_off = False
