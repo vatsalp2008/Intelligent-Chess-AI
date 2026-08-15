@@ -21,6 +21,8 @@ from knightmare_bot import (
     MAX_MOVE_TIME,
     MAX_SEARCH_DEPTH,
     PIECE_SQUARE_TABLES,
+    ROOK_HALF_OPEN_FILE_BONUS,
+    ROOK_OPEN_FILE_BONUS,
     TT_MAX_ENTRIES,
     KnightmareBot,
     format_score,
@@ -213,6 +215,48 @@ class TestPawnStructurePenalties(unittest.TestCase):
         white = self.score("4k3/8/8/8/8/8/P6P/4K3 w - - 0 1", chess.WHITE)
         black = self.score("4k3/p6p/8/8/8/8/8/4K3 w - - 0 1", chess.BLACK)
         self.assertEqual(white, black)
+
+
+class TestRookFiles(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def score(self, fen, color=chess.WHITE):
+        return self.bot.rook_file_score(chess.Board(fen), color)
+
+    def test_file_with_no_pawns_is_open(self):
+        self.assertEqual(
+            self.score("4k3/8/8/8/8/8/4P3/4KR2 w - - 0 1"), ROOK_OPEN_FILE_BONUS
+        )
+
+    def test_file_with_only_enemy_pawns_is_half_open(self):
+        self.assertEqual(
+            self.score("4k3/5p2/8/8/8/8/8/4KR2 w - - 0 1"), ROOK_HALF_OPEN_FILE_BONUS
+        )
+
+    def test_own_pawn_blocks_the_file(self):
+        self.assertEqual(self.score("4k3/8/8/8/8/8/5P2/4KR2 w - - 0 1"), 0)
+
+    def test_enemy_pawn_on_another_file_does_not_count(self):
+        """Only the rook's own file matters"""
+        self.assertEqual(
+            self.score("4k3/4p3/8/8/8/8/8/4KR2 w - - 0 1"), ROOK_OPEN_FILE_BONUS
+        )
+
+    def test_open_file_beats_half_open(self):
+        self.assertGreater(ROOK_OPEN_FILE_BONUS, ROOK_HALF_OPEN_FILE_BONUS)
+
+    def test_each_rook_is_counted(self):
+        both = self.score("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1")
+        self.assertEqual(both, 2 * ROOK_OPEN_FILE_BONUS)
+
+    def test_scored_the_same_for_black(self):
+        white = self.score("4k3/8/8/8/8/8/8/4KR2 w - - 0 1", chess.WHITE)
+        black = self.score("4kr2/8/8/8/8/8/8/4K3 w - - 0 1", chess.BLACK)
+        self.assertEqual(white, black)
+
+    def test_no_rooks_scores_nothing(self):
+        self.assertEqual(self.score("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"), 0)
 
 
 class TestEndgameDetection(unittest.TestCase):
