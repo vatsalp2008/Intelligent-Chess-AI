@@ -564,6 +564,12 @@ class KnightmareBot:
         if board.is_game_over():
             return self.evaluate(board, ply), None
 
+        # Being in check is a forced sequence, so stopping here would cut a
+        # forced line in half. Search one ply further to see how it ends.
+        in_check = board.is_check()
+        if in_check and depth == 0 and ply < MAX_PLY:
+            depth = 1
+
         if depth == 0:
             return self.quiesce(board, alpha, beta, ply), None
 
