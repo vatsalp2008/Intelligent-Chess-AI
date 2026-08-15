@@ -10,7 +10,13 @@ import os
 import random
 import re
 import time
-import ollama
+
+try:
+    import ollama
+except ImportError:
+    # Parsing and logging are useful (and testable) without a model server
+    ollama = None
+
 from datetime import datetime
 import json
 
@@ -183,10 +189,14 @@ Reply with just the move (like e2e4)."""
         
         if not legal_moves:
             return None
-        
+
         if len(legal_moves) == 1:
             return legal_moves[0]
-        
+
+        if ollama is None:
+            print("info string Ollama is not installed, playing randomly")
+            return random.choice(legal_moves)
+
         # Check for immediate checkmate
         for move in legal_moves:
             board.push(move)

@@ -13,6 +13,7 @@ import unittest
 import chess
 
 from knightmare_llm import DEFAULT_MOVE_TIME, parse_move, parse_movetime
+from knightmare_llm_mistral import KnightmareLLMRecovery, default_log_path
 
 
 class TestParseMove(unittest.TestCase):
@@ -85,6 +86,66 @@ class TestParseMovetime(unittest.TestCase):
 
     def test_explicit_default_is_respected(self):
         self.assertEqual(parse_movetime("go", default=7.5), 7.5)
+
+
+class TestRecoveryParsing(unittest.TestCase):
+    """The mistral bot's multi-strategy parser"""
+
+    def setUp(self):
+        # Built without touching __init__ so no log file is created
+        self.bot = KnightmareLLMRecovery.__new__(KnightmareLLMRecovery)
+        self.legal = list(chess.Board().legal_moves)
+
+    def parse(self, text):
+        return self.bot.parse_move_with_recovery(text, self.legal)
+
+    def test_bare_move(self):
+        move, error = self.parse("e2e4")
+        self.assertEqual(move, chess.Move.from_uci("e2e4"))
+        self.assertIsNone(error)
+
+    def test_move_inside_prose(self):
+        move, error = self.parse("I think the strongest continuation is g1f3 here.")
+        self.assertEqual(move, chess.Move.from_uci("g1f3"))
+        self.assertIsNone(error)
+
+    def test_dashed_move_in_first_token(self):
+        move, _ = self.parse("e2-e4")
+        self.assertEqual(move, chess.Move.from_uci("e2e4"))
+
+    def test_empty_reply_is_reported(self):
+        move, error = self.parse("")
+        self.assertIsNone(move)
+        self.assertEqual(error, "Empty response")
+
+    def test_unparseable_reply_is_reported(self):
+        move, error = self.parse("Nf3 is best")
+        self.assertIsNone(move)
+        self.assertIn("Could not parse", error)
+
+    def test_illegal_move_is_not_returned(self):
+        move, error = self.parse("a1a8")
+        self.assertIsNone(move)
+        self.assertIsNotNone(error)
+
+
+class TestLogPath(unittest.TestCase):
+    def test_default_is_a_relative_jsonl_file(self):
+        path = default_log_path()
+        self.assertTrue(path.endswith(".jsonl"))
+        self.assertTrue(path.startswith("llm_log_recovery_"))
+
+    def test_log_dir_environment_variable_is_used(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["KNIGHTMARE_LOG_DIR"] = tmp
+            try:
+                path = default_log_path()
+            finally:
+                del os.environ["KNIGHTMARE_LOG_DIR"]
+            self.assertTrue(path.startswith(tmp))
 
 
 if __name__ == "__main__":
