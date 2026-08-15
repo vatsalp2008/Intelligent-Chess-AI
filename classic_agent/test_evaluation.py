@@ -23,6 +23,7 @@ from knightmare_bot import (
     PIECE_SQUARE_TABLES,
     ROOK_HALF_OPEN_FILE_BONUS,
     ROOK_OPEN_FILE_BONUS,
+    SEE_PIECE_VALUES,
     TT_MAX_ENTRIES,
     KnightmareBot,
     format_score,
@@ -30,6 +31,8 @@ from knightmare_bot import (
     parse_go,
     parse_position,
     piece_square_bonus,
+    static_exchange_eval,
+    cheapest_attacker_move,
 )
 
 INFINITY = float("inf")
@@ -362,6 +365,92 @@ class TestMoveOrdering(unittest.TestCase):
         for uci in ("e2e4", "d2d4", "g1f3", "b1c3"):
             self.bot.record_cutoff(board, chess.Move.from_uci(uci), depth=1, ply=0)
         self.assertLessEqual(len(self.bot.killer_moves[0]), 2)
+
+
+class TestStaticExchangeEvaluation(unittest.TestCase):
+    """Playing an exchange out is easy to get subtly wrong"""
+
+    def see(self, fen, uci):
+        board = chess.Board(fen)
+        before = board.fen()
+        value = static_exchange_eval(board, chess.Move.from_uci(uci))
+        self.assertEqual(board.fen(), before, "SEE must not mutate the board")
+        return value
+
+    def test_capturing_a_free_queen_wins_a_queen(self):
+        self.assertEqual(
+            self.see("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1", "e4d5"),
+            SEE_PIECE_VALUES[chess.QUEEN],
+        )
+
+    def test_capturing_a_free_pawn_wins_a_pawn(self):
+        self.assertEqual(
+            self.see("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5"),
+            SEE_PIECE_VALUES[chess.PAWN],
+        )
+
+    def test_even_pawn_trade_is_worth_nothing(self):
+        self.assertEqual(self.see("4k3/8/2p5/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5"), 0)
+
+    def test_queen_takes_defended_pawn_loses_material(self):
+        """QxP with the pawn defended drops the queen for a pawn"""
+        value = self.see("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1", "d1d5")
+        self.assertEqual(
+            value, SEE_PIECE_VALUES[chess.PAWN] - SEE_PIECE_VALUES[chess.QUEEN]
+        )
+
+    def test_rook_takes_defended_pawn_loses_material(self):
+        value = self.see("4k3/3r4/8/3p4/8/8/8/3RK3 w - - 0 1", "d1d5")
+        self.assertEqual(
+            value, SEE_PIECE_VALUES[chess.PAWN] - SEE_PIECE_VALUES[chess.ROOK]
+        )
+
+    def test_cheapest_attacker_recaptures_first(self):
+        """White has just captured on d5; Black should recapture with the pawn
+
+        Both the c6 pawn and the d7 rook can take, and the pawn is the
+        cheaper piece to commit to the exchange.
+        """
+        board = chess.Board("4k3/3r4/2p5/3P4/8/8/8/3RK3 b - - 0 1")
+        move = cheapest_attacker_move(board, chess.D5, chess.BLACK)
+        self.assertEqual(move, chess.Move.from_uci("c6d5"))
+
+    def test_only_attacker_is_used_when_there_is_one_choice(self):
+        board = chess.Board("4k3/3r4/8/3P4/8/8/8/4K3 b - - 0 1")
+        move = cheapest_attacker_move(board, chess.D5, chess.BLACK)
+        self.assertEqual(move, chess.Move.from_uci("d7d5"))
+
+    def test_no_attacker_returns_nothing(self):
+        board = chess.Board("4k3/8/8/3p4/8/8/8/4K3 w - - 0 1")
+        self.assertIsNone(cheapest_attacker_move(board, chess.D5, chess.WHITE))
+
+    def test_own_piece_on_the_square_is_not_capturable(self):
+        """A side cannot capture its own piece, so there is no recapture"""
+        board = chess.Board("4k3/3r4/2p5/3p4/8/8/8/3RK3 b - - 0 1")
+        self.assertIsNone(cheapest_attacker_move(board, chess.D5, chess.BLACK))
+
+    def test_non_capture_scores_zero(self):
+        self.assertEqual(self.see("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1", "e2e4"), 0)
+
+    def test_losing_captures_sort_below_quiet_moves(self):
+        """The whole point: QxP defended must not be tried first"""
+        bot = KnightmareBot()
+        board = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        ordered = bot.order_moves(board, list(board.legal_moves))
+        self.assertEqual(ordered[-1], chess.Move.from_uci("d1d5"))
+
+    def test_winning_captures_sort_first(self):
+        bot = KnightmareBot()
+        board = chess.Board("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1")
+        ordered = bot.order_moves(board, list(board.legal_moves))
+        self.assertEqual(ordered[0], chess.Move.from_uci("e4d5"))
+
+    def test_quiescence_skips_losing_captures(self):
+        """Resolving a capture the side to move would never play is wasted"""
+        bot = KnightmareBot()
+        board = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        quiet = bot.quiesce(board, -INFINITY, INFINITY, 0)
+        self.assertEqual(quiet, bot.evaluate(board, 0))
 
 
 class TestQuiescence(unittest.TestCase):
