@@ -16,7 +16,6 @@ def createRandomGame(rounds, actions, seed=0, isZeroSum=True):
     random.seed(seed)
     attrs = {}
     for node in G.nodes():
-        print(node)
         if len(list(G.neighbors(node))) == 0:
             if isZeroSum:
                 payoff = random.randint(-42, 42)
