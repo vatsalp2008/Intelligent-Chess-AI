@@ -75,6 +75,17 @@ ROOK_OPEN_FILE_BONUS = 20
 # Rook on a file holding only enemy pawns
 ROOK_HALF_OPEN_FILE_BONUS = 10
 
+# Values used when playing out an exchange. The king is given a huge value
+# so it is only ever used as a last resort recapture.
+SEE_PIECE_VALUES = {
+    chess.PAWN: 100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK: 500,
+    chess.QUEEN: 900,
+    chess.KING: 10000,
+}
+
 # Piece-square tables, written from White's point of view with rank 8 on the
 # first row so they read like a board. Values are centipawn adjustments on
 # top of the piece value. Black looks them up through a mirrored square.
@@ -164,6 +175,74 @@ PIECE_SQUARE_TABLES = {
     chess.QUEEN: QUEEN_TABLE,
     chess.KING: KING_MIDDLEGAME_TABLE,
 }
+
+
+def static_exchange_eval(board, move):
+    """Material won or lost by playing a capture and letting it play out
+
+    Plays the whole exchange on the target square, each side always
+    recapturing with its cheapest attacker, and returns the net centipawn
+    gain for the side making the move. A negative result means the capture
+    loses material, which the search can then avoid without searching it.
+    """
+    target = move.to_square
+    captured = board.piece_at(target)
+
+    # En passant takes a pawn that is not standing on the target square
+    if captured is None:
+        if not board.is_en_passant(move):
+            return 0
+        gain = SEE_PIECE_VALUES[chess.PAWN]
+    else:
+        gain = SEE_PIECE_VALUES[captured.piece_type]
+
+    attacker = board.piece_at(move.from_square)
+    if attacker is None:
+        return 0
+
+    # Work on a copy: the exchange is simulated, not played for real
+    scratch = board.copy(stack=False)
+    scratch.push(move)
+
+    # gains[i] is the running material balance after i captures
+    gains = [gain]
+    on_square = attacker.piece_type
+    side = not board.turn
+
+    while True:
+        capture = cheapest_attacker_move(scratch, target, side)
+        if capture is None:
+            break
+
+        gains.append(SEE_PIECE_VALUES[on_square] - gains[-1])
+        on_square = scratch.piece_at(capture.from_square).piece_type
+        scratch.push(capture)
+        side = not side
+
+    # Walk back up: each side stops capturing when the exchange turns bad
+    for i in range(len(gains) - 2, -1, -1):
+        gains[i] = -max(-gains[i], gains[i + 1])
+
+    return gains[0]
+
+
+def cheapest_attacker_move(board, target, color):
+    """The least valuable legal capture of target by color, if any"""
+    best_move = None
+    best_value = None
+
+    for move in board.legal_moves:
+        if move.to_square != target:
+            continue
+        piece = board.piece_at(move.from_square)
+        if piece is None or piece.color != color:
+            continue
+        value = SEE_PIECE_VALUES[piece.piece_type]
+        if best_value is None or value < best_value:
+            best_value = value
+            best_move = move
+
+    return best_move
 
 
 def is_passed_pawn(square, color, enemy_pawns):
