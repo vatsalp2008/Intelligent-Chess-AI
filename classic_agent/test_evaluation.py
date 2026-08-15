@@ -14,14 +14,17 @@ from knightmare_bot import (
     BISHOP_PAIR_BONUS,
     DEFAULT_MAX_DEPTH,
     DEFAULT_MOVE_TIME,
+    ISOLATED_PAWN_PENALTY,
     KING_ENDGAME_TABLE,
     MATE_SCORE,
+    PASSED_PAWN_BONUS,
     MAX_MOVE_TIME,
     MAX_SEARCH_DEPTH,
     PIECE_SQUARE_TABLES,
     TT_MAX_ENTRIES,
     KnightmareBot,
     format_score,
+    is_passed_pawn,
     parse_go,
     parse_position,
     piece_square_bonus,
@@ -133,6 +136,83 @@ class TestPieceSquareTables(unittest.TestCase):
         developed = chess.Board("4k3/pppppppp/8/8/8/5N2/PPPPPPPP/4K3 w - - 0 1")
         home = chess.Board("4k3/pppppppp/8/8/8/8/PPPPPPPP/1N2K3 w - - 0 1")
         self.assertGreater(self.bot.evaluate(developed), self.bot.evaluate(home))
+
+
+class TestPassedPawns(unittest.TestCase):
+    def test_lone_pawn_is_passed(self):
+        board = chess.Board("4k3/8/8/4P3/8/8/8/4K3 w - - 0 1")
+        self.assertTrue(is_passed_pawn(chess.E5, chess.WHITE, board.pieces(chess.PAWN, chess.BLACK)))
+
+    def test_enemy_pawn_ahead_on_the_same_file_blocks(self):
+        board = chess.Board("4k3/4p3/8/4P3/8/8/8/4K3 w - - 0 1")
+        self.assertFalse(is_passed_pawn(chess.E5, chess.WHITE, board.pieces(chess.PAWN, chess.BLACK)))
+
+    def test_enemy_pawn_ahead_on_an_adjacent_file_blocks(self):
+        board = chess.Board("4k3/5p2/8/4P3/8/8/8/4K3 w - - 0 1")
+        self.assertFalse(is_passed_pawn(chess.E5, chess.WHITE, board.pieces(chess.PAWN, chess.BLACK)))
+
+    def test_enemy_pawn_behind_does_not_block(self):
+        """A pawn that has already been passed cannot come back"""
+        board = chess.Board("4k3/8/8/4P3/8/4p3/8/4K3 w - - 0 1")
+        self.assertTrue(is_passed_pawn(chess.E5, chess.WHITE, board.pieces(chess.PAWN, chess.BLACK)))
+
+    def test_distant_file_does_not_block(self):
+        board = chess.Board("4k3/1p6/8/4P3/8/8/8/4K3 w - - 0 1")
+        self.assertTrue(is_passed_pawn(chess.E5, chess.WHITE, board.pieces(chess.PAWN, chess.BLACK)))
+
+    def test_black_passers_are_detected_the_same_way(self):
+        board = chess.Board("4k3/8/8/4p3/8/8/8/4K3 w - - 0 1")
+        self.assertTrue(is_passed_pawn(chess.E5, chess.BLACK, board.pieces(chess.PAWN, chess.WHITE)))
+        blocked = chess.Board("4k3/8/8/4p3/8/8/4P3/4K3 w - - 0 1")
+        self.assertFalse(
+            is_passed_pawn(chess.E5, chess.BLACK, blocked.pieces(chess.PAWN, chess.WHITE))
+        )
+
+    def test_advanced_passers_are_worth_more(self):
+        bot = KnightmareBot()
+
+        def score_at(square):
+            board = chess.Board("4k3/8/8/8/8/8/8/4K3 w - - 0 1")
+            board.set_piece_at(square, chess.Piece(chess.PAWN, chess.WHITE))
+            return bot.pawn_structure_score(board, chess.WHITE)
+
+        self.assertGreater(score_at(chess.E7), score_at(chess.E5))
+        self.assertGreater(score_at(chess.E5), score_at(chess.E2))
+
+
+class TestPawnStructurePenalties(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def score(self, fen, color=chess.WHITE):
+        return self.bot.pawn_structure_score(chess.Board(fen), color)
+
+    def test_doubled_pawns_are_penalised(self):
+        healthy = self.score("4k3/8/8/8/8/8/3PP3/4K3 w - - 0 1")
+        doubled = self.score("4k3/8/8/8/3P4/8/3PP3/4K3 w - - 0 1")
+        # The extra pawn adds a passer bonus, so compare against that
+        extra_passer = PASSED_PAWN_BONUS[3]
+        self.assertLess(doubled, healthy + extra_passer)
+
+    def test_isolated_pawns_are_penalised(self):
+        connected = self.score("4k3/8/8/8/8/8/3PP3/4K3 w - - 0 1")
+        isolated = self.score("4k3/8/8/8/8/8/P6P/4K3 w - - 0 1")
+        self.assertLess(isolated, connected)
+
+    def test_a_single_pawn_counts_as_isolated(self):
+        lone = self.score("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        self.assertEqual(lone, PASSED_PAWN_BONUS[1] - ISOLATED_PAWN_PENALTY)
+
+    def test_neighbouring_pawn_prevents_isolation(self):
+        self.assertEqual(
+            self.score("4k3/8/8/8/8/8/3PP3/4K3 w - - 0 1"),
+            2 * PASSED_PAWN_BONUS[1],
+        )
+
+    def test_structure_is_scored_the_same_for_both_colours(self):
+        white = self.score("4k3/8/8/8/8/8/P6P/4K3 w - - 0 1", chess.WHITE)
+        black = self.score("4k3/p6p/8/8/8/8/8/4K3 w - - 0 1", chess.BLACK)
+        self.assertEqual(white, black)
 
 
 class TestEndgameDetection(unittest.TestCase):
