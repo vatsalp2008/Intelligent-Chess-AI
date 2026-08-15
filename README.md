@@ -15,12 +15,15 @@ Intelligent-Chess-AI/
 │   ├── simple_web_chess.py   # Web Interface
 │   ├── simple_tournament.py  # Tournament Runner (PGN output)
 │   ├── test_evaluation.py    # Evaluation & Search Unit Tests
+│   ├── test_search_safety.py # Legal-move Regression Tests
+│   ├── selfplay.py           # Measure a Change Against a Saved Engine
 │   ├── test_bots.py          # UCI Protocol Smoke Test
 │   └── ...
 ├── llm_agent/                # LLM-based Bots (Ollama)
 │   ├── knightmare_llm.py     # LLM Bot Logic
 │   ├── knightmare.py         # Minimax Baseline Opponent
 │   ├── test_knightmare.py    # Baseline Search Unit Tests
+│   ├── test_llm_parsing.py   # Prompt Parsing Unit Tests
 │   ├── tournament.py         # Multi-bot Tournament
 │   └── ...
 ├── requirements.txt          # Unified Dependencies
@@ -51,23 +54,42 @@ An intelligent chess AI implementing minimax with alpha-beta pruning.
 ### Key Features
 *   **Strength**: Beat random bots 20/20 games.
 *   **Search**: Minimax with Alpha-Beta pruning, Iterative Deepening.
-*   **Optimizations**: Killer Moves, History Heuristic, Quiescence Search, Transposition Table.
-*   **Evaluation**: Material, pawn advancement, piece centralization, bishop pair, mobility.
+*   **Optimizations**: Killer Moves, History Heuristic, Quiescence Search, Transposition Table, Static Exchange Evaluation, Check Extensions.
+*   **Evaluation**: Material, piece-square tables, pawn structure, passed pawns, king shelter, rook files, bishop pair, mobility.
 
 ### How the search works
 
 | Piece | Where | Notes |
 | :--- | :--- | :--- |
+| Opening book | `book_move` | A short book of mainlines, keyed by position so it works through transpositions and from a FEN. Consulted after the mate check, so it can never talk the engine out of a forced win. |
 | Iterative deepening | `get_move` | Searches depth 1 upward, stopping when the time budget runs low. The deepest completed iteration wins. |
 | Alpha-beta minimax | `minimax` | Absolute scores: positive favours White whichever side is to move. |
-| Quiescence search | `quiesce` | Past the horizon, keeps resolving captures and promotions so the engine is not fooled by a half-finished trade. |
+| Quiescence search | `quiesce` | Past the horizon, keeps resolving captures and promotions so the engine is not fooled by a half-finished trade. Captures that lose material are skipped outright. |
+| Static exchange evaluation | `static_exchange_eval` | Plays an exchange out with the cheapest attacker each time, so the engine knows QxP is bad when the pawn is defended without searching it. Drives capture ordering and quiescence pruning. |
+| Check extensions | `minimax` | Being in check is forced, so the search goes one ply further rather than stopping mid-sequence. |
 | Transposition table | `store_tt` | Keyed on position and depth. Entries record whether the score is exact or only a bound, and are reused only when they still settle the current window. Mate scores are never cached because they are relative to the ply they were found at. |
-| Move ordering | `order_moves` | MVV-LVA captures, promotions, checks, killer moves, history heuristic, then central squares. |
+| Move ordering | `order_moves` | Captures ranked by exchange value, promotions, checks, killer moves, history heuristic, then central squares. Losing captures sort below every quiet move. |
+| Principal variation | `extract_pv` | The expected line is read back out of the table and reported on each `info` line. |
 | Mate distance | `evaluate` | Mate scores shrink with depth, so a mate in 1 outranks a mate in 4. |
 
 Draw conditions that require a claim (threefold repetition, the fifty-move
 rule) are scored as draws during the search, so a winning engine will not
 shuffle into one.
+
+### Measuring a change
+
+Search and evaluation changes are easy to get wrong in ways that look
+plausible, so `selfplay.py` plays the current engine against a saved copy
+of itself at a fixed depth, alternating colours across a dozen openings:
+
+```bash
+cd classic_agent
+git show HEAD~1:classic_agent/knightmare_bot.py > /tmp/old_bot.py
+python selfplay.py /tmp/old_bot.py --depth 3
+```
+
+Fixed depth rather than fixed time keeps the result reproducible. As a
+sanity check, an engine played against an identical copy scores 50%.
 
 ### Time control
 
@@ -108,12 +130,14 @@ Only `chess` is needed for the test suites:
 pip install -r requirements-dev.txt
 
 cd classic_agent
-python -m unittest test_evaluation   # evaluation, search and UCI parsing
-python test_bots.py                  # UCI protocol smoke test
-python diagnose_knight.py            # per-position search diagnostics
+python -m unittest test_evaluation     # evaluation, search and UCI parsing
+python -m unittest test_search_safety  # always returns a legal move
+python test_bots.py                    # UCI protocol smoke test
+python diagnose_knight.py              # per-position search diagnostics
 
 cd ../llm_agent
-python -m unittest test_knightmare   # KnightmareFast search tests
+python -m unittest test_knightmare     # KnightmareFast search tests
+python -m unittest test_llm_parsing    # prompt parsing (no Ollama needed)
 ```
 These also run on every push via [GitHub Actions](.github/workflows/tests.yml).
 
@@ -139,16 +163,18 @@ python knightmare_llm.py                     # llama3.2
 python knightmare_llm_mistral.py             # mistral, with recovery strategies
 ```
 
-The mistral bot reads two environment variables:
+Both LLM bots read the same environment variables:
 
 | Variable | Purpose |
 | :--- | :--- |
-| `KNIGHTMARE_MODEL` | Ollama model to prompt (default `mistral`) |
+| `KNIGHTMARE_MODEL` | Ollama model to prompt (defaults to `llama3.2` or `mistral` depending on the script) |
 | `KNIGHTMARE_LOG_DIR` | Where to write the `llm_log_recovery_*.jsonl` interaction log |
 
-It tries four prompting strategies in order — standard, error feedback,
-numbered list, simplified — falling back to a random legal move if all of
-them fail, and stops early once the `movetime` budget is spent.
+`knightmare_llm_mistral.py` tries four prompting strategies in order —
+standard, error feedback, numbered list, simplified — falling back to a
+random legal move if all of them fail. Both bots stop asking once the
+`movetime` budget is spent, and both parse replies by scanning for the
+first legal UCI move in the text.
 
 `knightmare.py` is a plain minimax engine (no LLM) used as a strong
 baseline opponent in the tournament.
