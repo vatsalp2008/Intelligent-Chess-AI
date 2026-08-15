@@ -80,6 +80,9 @@ ROOK_HALF_OPEN_FILE_BONUS = 10
 # Charged per file around the king with no friendly pawn on it
 KING_SHIELD_PENALTY = 12
 
+# Stop consulting the opening book after this many full moves
+BOOK_MAX_FULLMOVES = 5
+
 # Captures that lose material are ordered below every quiet move
 LOSING_CAPTURE_SCORE = -1000
 
@@ -259,6 +262,65 @@ def cheapest_attacker_move(board, target, color):
     return None
 
 
+def build_opening_book():
+    """Mainline replies keyed by the moves played so far
+
+    Keeping the key as a move sequence rather than a FEN avoids storing
+    long position strings, and the search is strong enough from move four
+    onwards that only the first few moves are worth memorising.
+    """
+    book = {
+        # First move as White
+        (): ["e2e4", "d2d4", "g1f3", "c2c4"],
+
+        # Replies to 1.e4
+        ("e2e4",): ["e7e5", "c7c5", "e7e6", "c7c6"],
+        ("e2e4", "e7e5"): ["g1f3"],
+        ("e2e4", "e7e5", "g1f3"): ["b8c6", "g8f6"],
+        ("e2e4", "e7e5", "g1f3", "b8c6"): ["f1b5", "f1c4"],
+        ("e2e4", "c7c5"): ["g1f3"],
+        ("e2e4", "c7c5", "g1f3"): ["d7d6", "b8c6"],
+        ("e2e4", "e7e6"): ["d2d4"],
+        ("e2e4", "c7c6"): ["d2d4"],
+
+        # Replies to 1.d4
+        ("d2d4",): ["d7d5", "g8f6"],
+        ("d2d4", "d7d5"): ["c2c4"],
+        ("d2d4", "d7d5", "c2c4"): ["e7e6", "c7c6"],
+        ("d2d4", "g8f6"): ["c2c4"],
+        ("d2d4", "g8f6", "c2c4"): ["e7e6", "g7g6"],
+
+        # Replies to 1.Nf3 and 1.c4
+        ("g1f3",): ["d7d5", "g8f6"],
+        ("c2c4",): ["e7e5", "g8f6"],
+    }
+    return book
+
+
+def book_move(board, book):
+    """A book reply for this position, or None once out of book"""
+    if board.fullmove_number > BOOK_MAX_FULLMOVES:
+        return None
+
+    key = tuple(move.uci() for move in board.move_stack)
+    replies = book.get(key)
+    if not replies:
+        return None
+
+    # Only offer moves that are actually legal here, in case the position
+    # was reached by a transposition the book does not really cover
+    legal = []
+    for uci in replies:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            continue
+        if move in board.legal_moves:
+            legal.append(move)
+
+    return random.choice(legal) if legal else None
+
+
 def is_passed_pawn(square, color, enemy_pawns):
     """True when no enemy pawn can stop this one from promoting
 
@@ -305,6 +367,7 @@ class KnightmareBot:
         self.killer_moves = {}
         self.history_table = {}
         self.transposition_table = {}
+        self.opening_book = build_opening_book()
 
     def store_tt(self, key, score, move, flag):
         """Cache a search result, skipping values that do not travel well
@@ -722,7 +785,14 @@ class KnightmareBot:
                 board.pop()
                 return move
             board.pop()
-        
+
+        # Known theory, consulted only after the mate check above so the
+        # book can never talk the engine out of a forced win
+        opening = book_move(board, self.opening_book)
+        if opening is not None:
+            print(f"info string book move {opening.uci()}", flush=True)
+            return opening
+
         # Default to first legal move (will be replaced by search)
         best_move = legal_moves[0]
         
