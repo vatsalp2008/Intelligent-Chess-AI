@@ -15,6 +15,7 @@ from knightmare_bot import (
     DEFAULT_MAX_DEPTH,
     DEFAULT_MOVE_TIME,
     ISOLATED_PAWN_PENALTY,
+    KING_SHIELD_PENALTY,
     KING_ENDGAME_TABLE,
     MATE_SCORE,
     PASSED_PAWN_BONUS,
@@ -260,6 +261,48 @@ class TestRookFiles(unittest.TestCase):
 
     def test_no_rooks_scores_nothing(self):
         self.assertEqual(self.score("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"), 0)
+
+
+class TestKingSafety(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def score(self, fen, color=chess.WHITE):
+        return self.bot.king_safety_score(chess.Board(fen), color)
+
+    def test_full_shield_costs_nothing(self):
+        self.assertEqual(
+            self.score("rnbq1rk1/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1RK1 w - - 0 1"), 0
+        )
+
+    def test_each_missing_file_is_charged(self):
+        two_gone = self.score("rnbq1rk1/pppppppp/8/8/8/8/PPPPPP2/RNBQ1RK1 w - - 0 1")
+        three_gone = self.score("rnbq1rk1/pppppppp/8/8/8/8/PPPPP3/RNBQ1RK1 w - - 0 1")
+        self.assertEqual(two_gone, -2 * KING_SHIELD_PENALTY)
+        self.assertEqual(three_gone, -3 * KING_SHIELD_PENALTY)
+
+    def test_an_advanced_pawn_still_counts_as_cover(self):
+        """Shelter is judged by file, so a pawn on h4 still covers the h file"""
+        self.assertEqual(
+            self.score("rnbq1rk1/pppppppp/8/8/7P/8/PPPPPPP1/RNBQ1RK1 w - - 0 1"), 0
+        )
+
+    def test_a_king_on_the_edge_only_has_two_neighbouring_files(self):
+        """A king on the a file cannot be charged for a file that does not exist"""
+        exposed = self.score("7k/8/8/8/8/8/1P6/K7 w - - 0 1")
+        self.assertGreaterEqual(exposed, -2 * KING_SHIELD_PENALTY)
+
+    def test_black_is_scored_the_same_way(self):
+        white = self.score("rnbq1rk1/pppppppp/8/8/8/8/PPPPPP2/RNBQ1RK1 w - - 0 1", chess.WHITE)
+        black = self.score("rnbq1rk1/pppppp2/8/8/8/8/PPPPPPPP/RNBQ1RK1 w - - 0 1", chess.BLACK)
+        self.assertEqual(white, black)
+
+    def test_shelter_is_ignored_once_the_endgame_arrives(self):
+        """A bare king in an endgame should not be charged for shelter"""
+        endgame = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        self.assertTrue(self.bot.is_endgame(endgame))
+        # evaluate() only applies the term outside the endgame
+        self.assertEqual(self.bot.evaluate(endgame), -self.bot.evaluate(endgame.mirror()))
 
 
 class TestEndgameDetection(unittest.TestCase):
