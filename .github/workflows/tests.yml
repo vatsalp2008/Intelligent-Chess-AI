@@ -36,6 +36,12 @@ jobs:
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
 
+      - name: Run LLM prompt parsing tests
+        # These import the bots without Ollama installed, which is what the
+        # optional import in those modules exists to allow.
+        working-directory: llm_agent
+        run: python -m unittest discover -p "test_llm_parsing.py" -v
+
       - name: Check every tracked module compiles
         run: |
           git ls-files '*.py' | xargs python -m py_compile
