@@ -32,6 +32,10 @@ jobs:
         working-directory: classic_agent
         run: python -m unittest discover -p "test_evaluation.py" -v
 
+      - name: Run search safety tests
+        working-directory: classic_agent
+        run: python -m unittest discover -p "test_search_safety.py" -v
+
       - name: Run LLM agent search tests
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
