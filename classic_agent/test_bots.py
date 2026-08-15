@@ -24,38 +24,30 @@ def test_bot(bot_path, test_name):
             bufsize=1
         )
         
-        def send_command(cmd):
-            """Send command and get response"""
-            proc.stdin.write(cmd + '\n')
-            proc.stdin.flush()
-            time.sleep(0.1)
-            
-            responses = []
-            while True:
-                try:
-                    line = proc.stdout.readline()
-                    if line:
-                        responses.append(line.strip())
-                    else:
-                        break
-                except:
+        def read_until(token, timeout=5):
+            """Collect output until token appears, EOF, or the timeout
+
+            Reading a dead engine returns '' forever, so stop on end of
+            file instead of spinning.
+            """
+            deadline = time.time() + timeout
+            lines = []
+            while time.time() < deadline:
+                line = proc.stdout.readline()
+                if line == "":
                     break
-            return responses
-        
+                lines.append(line.strip())
+                if token in line:
+                    break
+            return lines
+
         # Test 1: UCI handshake
         print("Test 1: UCI handshake")
         proc.stdin.write("uci\n")
         proc.stdin.flush()
         time.sleep(0.5)
         
-        response = []
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            response.append(line.strip())
-            if "uciok" in line:
-                break
+        response = read_until("uciok")
         
         if any("uciok" in r for r in response):
             print("✓ UCI handshake successful")
@@ -93,14 +85,7 @@ def test_bot(bot_path, test_name):
         proc.stdin.flush()
         time.sleep(0.3)
         
-        response = []
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            response.append(line.strip())
-            if "bestmove" in line:
-                break
+        response = read_until("bestmove")
         
         bestmove_line = next((r for r in response if r.startswith("bestmove")), None)
         if bestmove_line:
@@ -130,14 +115,7 @@ def test_bot(bot_path, test_name):
         proc.stdin.flush()
         time.sleep(0.3)
         
-        response = []
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            response.append(line.strip())
-            if "bestmove" in line:
-                break
+        response = read_until("bestmove")
         
         bestmove_line = next((r for r in response if r.startswith("bestmove")), None)
         if bestmove_line:
@@ -170,14 +148,7 @@ def test_bot(bot_path, test_name):
         proc.stdin.flush()
         time.sleep(0.3)
         
-        response = []
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            response.append(line.strip())
-            if "bestmove" in line:
-                break
+        response = read_until("bestmove")
         
         bestmove_line = next((r for r in response if r.startswith("bestmove")), None)
         if bestmove_line:
