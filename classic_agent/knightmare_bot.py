@@ -69,6 +69,12 @@ DOUBLED_PAWN_PENALTY = 15
 # A pawn with no friendly pawn on either neighbouring file is hard to defend
 ISOLATED_PAWN_PENALTY = 12
 
+# Rook on a file with no pawns at all
+ROOK_OPEN_FILE_BONUS = 20
+
+# Rook on a file holding only enemy pawns
+ROOK_HALF_OPEN_FILE_BONUS = 10
+
 # Piece-square tables, written from White's point of view with rank 8 on the
 # first row so they read like a board. Values are centipawn adjustments on
 # top of the piece value. Black looks them up through a mirrored square.
@@ -279,9 +285,36 @@ class KnightmareBot:
         score += self.pawn_structure_score(board, chess.WHITE)
         score -= self.pawn_structure_score(board, chess.BLACK)
 
+        # Rook placement relative to the pawns
+        score += self.rook_file_score(board, chess.WHITE)
+        score -= self.rook_file_score(board, chess.BLACK)
+
         # Mobility bonus
         mobility = len(list(board.legal_moves)) * 3
         score += mobility if board.turn == chess.WHITE else -mobility
+
+        return score
+
+    def rook_file_score(self, board, color):
+        """Reward rooks on files their own pawns have vacated
+
+        A file with no pawns at all is fully open; one with only enemy
+        pawns is half open and still gives the rook something to attack.
+        """
+        score = 0
+        own_pawn_files = {chess.square_file(sq) for sq in board.pieces(chess.PAWN, color)}
+        enemy_pawn_files = {
+            chess.square_file(sq) for sq in board.pieces(chess.PAWN, not color)
+        }
+
+        for square in board.pieces(chess.ROOK, color):
+            file_index = chess.square_file(square)
+            if file_index in own_pawn_files:
+                continue
+            if file_index in enemy_pawn_files:
+                score += ROOK_HALF_OPEN_FILE_BONUS
+            else:
+                score += ROOK_OPEN_FILE_BONUS
 
         return score
 
