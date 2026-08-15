@@ -263,13 +263,14 @@ def cheapest_attacker_move(board, target, color):
 
 
 def build_opening_book():
-    """Mainline replies keyed by the moves played so far
+    """Mainline replies keyed by position
 
-    Keeping the key as a move sequence rather than a FEN avoids storing
-    long position strings, and the search is strong enough from move four
-    onwards that only the first few moves are worth memorising.
+    The lines are written as move sequences because that is readable, then
+    replayed once to key them by position. Keying on the position rather
+    than the move list matters because a board set up from a FEN has no
+    move history at all, and it makes transpositions work for free.
     """
-    book = {
+    lines = {
         # First move as White
         (): ["e2e4", "d2d4", "g1f3", "c2c4"],
 
@@ -294,6 +295,21 @@ def build_opening_book():
         ("g1f3",): ["d7d5", "g8f6"],
         ("c2c4",): ["e7e5", "g8f6"],
     }
+
+    book = {}
+    for moves, replies in lines.items():
+        board = chess.Board()
+        for uci in moves:
+            board.push(chess.Move.from_uci(uci))
+        # Keep only replies that are legal in the position they belong to
+        legal = [
+            chess.Move.from_uci(uci)
+            for uci in replies
+            if chess.Move.from_uci(uci) in board.legal_moves
+        ]
+        if legal:
+            book[board._transposition_key()] = legal
+
     return book
 
 
@@ -302,22 +318,13 @@ def book_move(board, book):
     if board.fullmove_number > BOOK_MAX_FULLMOVES:
         return None
 
-    key = tuple(move.uci() for move in board.move_stack)
-    replies = book.get(key)
+    replies = book.get(board._transposition_key())
     if not replies:
         return None
 
-    # Only offer moves that are actually legal here, in case the position
-    # was reached by a transposition the book does not really cover
-    legal = []
-    for uci in replies:
-        try:
-            move = chess.Move.from_uci(uci)
-        except ValueError:
-            continue
-        if move in board.legal_moves:
-            legal.append(move)
-
+    # The stored moves were legal when the book was built, but a position
+    # reached another way can still differ, so check before offering one
+    legal = [move for move in replies if move in board.legal_moves]
     return random.choice(legal) if legal else None
 
 

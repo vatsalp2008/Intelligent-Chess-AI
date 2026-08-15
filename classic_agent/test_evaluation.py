@@ -12,6 +12,7 @@ import chess
 
 from knightmare_bot import (
     BISHOP_PAIR_BONUS,
+    BOOK_MAX_FULLMOVES,
     DEFAULT_MAX_DEPTH,
     DEFAULT_MOVE_TIME,
     ISOLATED_PAWN_PENALTY,
@@ -27,6 +28,8 @@ from knightmare_bot import (
     SEE_PIECE_VALUES,
     TT_MAX_ENTRIES,
     KnightmareBot,
+    build_opening_book,
+    book_move,
     format_score,
     is_passed_pawn,
     parse_go,
@@ -305,6 +308,76 @@ class TestKingSafety(unittest.TestCase):
         self.assertEqual(self.bot.evaluate(endgame), -self.bot.evaluate(endgame.mirror()))
 
 
+class TestOpeningBook(unittest.TestCase):
+    def setUp(self):
+        self.book = build_opening_book()
+
+    def test_every_stored_move_is_legal_where_it_is_stored(self):
+        """Built by replaying lines, so a typo would show up as an illegal move"""
+        board = chess.Board()
+        self.assertIn(board._transposition_key(), self.book)
+        for move in self.book[board._transposition_key()]:
+            self.assertIn(move, board.legal_moves)
+
+    def test_book_answers_the_starting_position(self):
+        self.assertIsNotNone(book_move(chess.Board(), self.book))
+
+    def test_book_answers_after_a_known_first_move(self):
+        board = chess.Board()
+        board.push(chess.Move.from_uci("e2e4"))
+        self.assertIsNotNone(book_move(board, self.book))
+
+    def test_unknown_position_is_not_in_book(self):
+        """A middlegame with no move history must not match the start entry
+
+        A board built from a FEN has an empty move stack, so keying the
+        book on the moves played would wrongly match the opening entry.
+        """
+        board = chess.Board(
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        )
+        self.assertEqual(len(board.move_stack), 0)
+        self.assertIsNone(book_move(board, self.book))
+
+    def test_transpositions_are_recognised(self):
+        """The same position reached via a FEN still finds its book entry"""
+        played = chess.Board()
+        for uci in ("d2d4", "d7d5"):
+            played.push(chess.Move.from_uci(uci))
+        via_fen = chess.Board(played.fen())
+        self.assertEqual(
+            book_move(played, self.book) is None,
+            book_move(via_fen, self.book) is None,
+        )
+
+    def test_book_is_dropped_after_the_opening(self):
+        board = chess.Board()
+        for uci in ("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6",
+                    "b5a4", "g8f6", "e1g1", "f8e7"):
+            board.push(chess.Move.from_uci(uci))
+        self.assertGreater(board.fullmove_number, BOOK_MAX_FULLMOVES)
+        self.assertIsNone(book_move(board, self.book))
+
+    def test_book_move_is_always_legal(self):
+        for _ in range(20):
+            board = chess.Board()
+            move = book_move(board, self.book)
+            self.assertIn(move, board.legal_moves)
+
+    def test_engine_plays_a_book_move_without_searching(self):
+        bot = KnightmareBot()
+        board = chess.Board()
+        move = bot.get_move(board, 60.0, 3)
+        self.assertIn(move, board.legal_moves)
+        self.assertEqual(len(bot.transposition_table), 0)
+
+    def test_a_forced_mate_beats_the_book(self):
+        """The mate check runs first, so the book cannot miss a win"""
+        bot = KnightmareBot()
+        board = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1")
+        self.assertEqual(bot.get_move(board, 60.0, 3), chess.Move.from_uci("e1e8"))
+
+
 class TestEndgameDetection(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareBot()
@@ -576,11 +649,15 @@ class TestTranspositionTable(unittest.TestCase):
 
 
 class TestPrincipalVariation(unittest.TestCase):
+    # Outside the opening book, so get_move actually searches and fills
+    # the table the principal variation is read back from
+    SEARCHED_FEN = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+
     def setUp(self):
         self.bot = KnightmareBot()
 
     def test_pv_moves_are_legal_in_sequence(self):
-        board = chess.Board()
+        board = chess.Board(self.SEARCHED_FEN)
         self.bot.get_move(board, 60.0, 3)
 
         scratch = board.copy()
@@ -589,23 +666,29 @@ class TestPrincipalVariation(unittest.TestCase):
             scratch.push(move)
 
     def test_pv_starts_with_the_chosen_move(self):
-        board = chess.Board()
+        board = chess.Board(self.SEARCHED_FEN)
         best = self.bot.get_move(board, 60.0, 3)
         pv = self.bot.extract_pv(board, 3)
         self.assertTrue(pv)
         self.assertEqual(pv[0], best)
 
     def test_pv_is_no_longer_than_the_depth(self):
-        board = chess.Board()
+        board = chess.Board(self.SEARCHED_FEN)
         self.bot.get_move(board, 60.0, 3)
         self.assertLessEqual(len(self.bot.extract_pv(board, 3)), 3)
 
     def test_extraction_does_not_change_the_board(self):
-        board = chess.Board()
+        board = chess.Board(self.SEARCHED_FEN)
         self.bot.get_move(board, 60.0, 3)
         before = board.fen()
         self.bot.extract_pv(board, 3)
         self.assertEqual(board.fen(), before)
+
+    def test_a_book_move_needs_no_search(self):
+        """From the start the book answers immediately, leaving no line"""
+        board = chess.Board()
+        move = self.bot.get_move(board, 60.0, 3)
+        self.assertIn(move, board.legal_moves)
 
     def test_empty_table_gives_an_empty_line(self):
         self.assertEqual(self.bot.extract_pv(chess.Board(), 4), [])
