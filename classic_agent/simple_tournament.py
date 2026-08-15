@@ -11,6 +11,10 @@ import chess.pgn
 import time
 from datetime import datetime
 
+class EngineDied(RuntimeError):
+    """Raised when an engine process exits or stops responding"""
+
+
 class ChessEngine:
     def __init__(self, path, name):
         self.path = path
@@ -37,16 +41,25 @@ class ChessEngine:
         
     def send(self, command):
         """Send command to engine"""
-        self.process.stdin.write(command + '\n')
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write(command + '\n')
+            self.process.stdin.flush()
+        except (BrokenPipeError, ValueError) as exc:
+            raise EngineDied(f"{self.name} is not accepting input: {exc}") from exc
         
     def wait_for(self, response, timeout=5):
-        """Wait for specific response"""
+        """Wait for specific response
+
+        A dead engine leaves readline() returning '' immediately, so give
+        up on end of file rather than spinning until the timeout expires.
+        """
         start = time.time()
         while time.time() - start < timeout:
-            line = self.process.stdout.readline().strip()
-            if response in line:
-                return line
+            raw = self.process.stdout.readline()
+            if raw == "":
+                raise EngineDied(f"{self.name} exited while waiting for {response}")
+            if response in raw.strip():
+                return raw.strip()
         raise TimeoutError(f"Timeout waiting for {response} from {self.name}")
     
     def get_move(self, board, time_ms=1000):
@@ -64,7 +77,10 @@ class ChessEngine:
         # Wait for bestmove
         start = time.time()
         while time.time() - start < (time_ms/1000 + 2):
-            line = self.process.stdout.readline().strip()
+            raw = self.process.stdout.readline()
+            if raw == "":
+                raise EngineDied(f"{self.name} exited before answering go")
+            line = raw.strip()
             if line.startswith("bestmove"):
                 move_uci = line.split()[1]
                 if move_uci == "0000":
