@@ -5,23 +5,44 @@ Author: Vatsal Patel
 """
 
 import chess
+import os
 import sys
 import random
+import time
 import ollama
 
+# Ollama model used unless KNIGHTMARE_MODEL says otherwise
+DEFAULT_MODEL = "llama3.2"
+
+# Seconds allowed for model round trips when the host sends no movetime
+DEFAULT_MOVE_TIME = 2.0
+
+# How many legal moves to offer the model at once
+MAX_MOVES_SHOWN = 15
+
+# How many times to ask before falling back to a random legal move
+MAX_ATTEMPTS = 3
+
+
 class LLMChessBot:
-    def __init__(self, model_name="llama3.2"):
-        self.model_name = model_name
-        
-    def get_best_move(self, board):
+    def __init__(self, model_name=None):
+        self.model_name = model_name or os.environ.get("KNIGHTMARE_MODEL", DEFAULT_MODEL)
+
+    def get_best_move(self, board, max_time=DEFAULT_MOVE_TIME):
+        """Ask the model for a move, falling back to a random legal one
+
+        Every retry costs a full model round trip, so stop asking once the
+        time budget is spent rather than overrunning the clock.
+        """
+        start_time = time.time()
         legal_moves = list(board.legal_moves)
-        
+
         if not legal_moves:
             return None
-        
+
         if len(legal_moves) == 1:
             return legal_moves[0]
-        
+
         # Check for checkmate in one move
         for move in legal_moves:
             board.push(move)
@@ -29,9 +50,9 @@ class LLMChessBot:
                 board.pop()
                 return move
             board.pop()
-        
+
         # Limit moves shown to avoid overwhelming the LLM
-        moves_to_show = legal_moves[:15]
+        moves_to_show = legal_moves[:MAX_MOVES_SHOWN]
         legal_moves_str = ", ".join([str(move) for move in moves_to_show])
         
         prompt = f"""Pick ONE move from this list: {legal_moves_str}
@@ -42,7 +63,15 @@ Board:
 Reply with just the move (like e2e4)."""
         
         # Try a few times if it fails
-        for attempt in range(3):
+        for attempt in range(MAX_ATTEMPTS):
+            # Another round trip would likely blow the budget
+            if attempt > 0 and time.time() - start_time > max_time:
+                print(
+                    f"info string Out of time after {attempt} attempt(s), "
+                    "falling back to random"
+                )
+                break
+
             try:
                 response = ollama.generate(model=self.model_name, prompt=prompt)
                 llm_output = response['response'].strip().lower()
@@ -68,6 +97,22 @@ Reply with just the move (like e2e4)."""
         
         # If all attempts fail, just pick random
         return random.choice(legal_moves)
+
+def parse_movetime(msg, default=DEFAULT_MOVE_TIME):
+    """Seconds to spend on a move, taken from a go command"""
+    parts = msg.split()
+    if "movetime" not in parts:
+        return default
+
+    idx = parts.index("movetime")
+    if idx + 1 >= len(parts):
+        return default
+
+    try:
+        return max(0.1, int(parts[idx + 1]) / 1000.0)
+    except ValueError:
+        return default
+
 
 # Globals for UCI
 global_bot = None
@@ -127,8 +172,8 @@ def uci(msg):
     elif msg.startswith("go"):
         if global_bot is None:
             global_bot = LLMChessBot()
-        
-        move = global_bot.get_best_move(global_board)
+
+        move = global_bot.get_best_move(global_board, parse_movetime(msg))
         
         if move and move in global_board.legal_moves:
             print(f"bestmove {move}")
