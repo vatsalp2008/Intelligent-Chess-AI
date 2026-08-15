@@ -13,7 +13,13 @@ from matplotlib.patches import FancyBboxPatch, Circle
 import sys
 
 def simple_evaluate(board):
-    """Simple evaluation function for visualization"""
+    """Simple evaluation function for visualization
+
+    Scores are absolute: positive favours White whoever is to move.
+    build_node() alternates maximizing and minimizing levels, so a
+    side-relative score would flip sign every ply and the tree would show
+    values that cannot be compared with each other.
+    """
     if board.is_checkmate():
         return -10000 if board.turn else 10000
     if board.is_stalemate():
@@ -39,10 +45,11 @@ def simple_evaluate(board):
             else:
                 value -= piece_value
     
-    # Small bonus for mobility
-    value += len(list(board.legal_moves)) * 5
-    
-    return value if board.turn == chess.WHITE else -value
+    # Small bonus for mobility, credited to whoever is to move
+    mobility = len(list(board.legal_moves)) * 5
+    value += mobility if board.turn == chess.WHITE else -mobility
+
+    return value
 
 def create_minimax_visualization():
     """Create minimax tree from Queen's Gambit Declined"""
