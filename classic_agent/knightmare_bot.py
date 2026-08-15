@@ -63,6 +63,12 @@ ENDGAME_PIECE_COUNT = 6
 # A pawn one step from promoting is worth far more than one still at home.
 PASSED_PAWN_BONUS = [0, 10, 20, 35, 60, 100, 150, 0]
 
+# Pawns stacked on the same file get in each other's way
+DOUBLED_PAWN_PENALTY = 15
+
+# A pawn with no friendly pawn on either neighbouring file is hard to defend
+ISOLATED_PAWN_PENALTY = 12
+
 # Piece-square tables, written from White's point of view with rank 8 on the
 # first row so they read like a board. Values are centipawn adjustments on
 # top of the piece value. Black looks them up through a mirrored square.
@@ -280,20 +286,38 @@ class KnightmareBot:
         return score
 
     def pawn_structure_score(self, board, color):
-        """Bonus for pawns that nothing can stop
+        """Score one side's pawn structure
 
-        A passer is worth more the closer it gets to promoting, so the
-        bonus is indexed by how far it has advanced.
+        Rewards passers, which are worth more the closer they get to
+        promoting, and penalises doubled and isolated pawns because both
+        are hard to defend and cannot support each other.
         """
         score = 0
         pawns = board.pieces(chess.PAWN, color)
         enemy_pawns = board.pieces(chess.PAWN, not color)
 
+        # How many of this side's pawns stand on each file
+        files = [0] * 8
         for square in pawns:
+            files[chess.square_file(square)] += 1
+
+        for square in pawns:
+            file_index = chess.square_file(square)
+
             if is_passed_pawn(square, color, enemy_pawns):
                 rank = chess.square_rank(square)
                 advanced = rank if color == chess.WHITE else 7 - rank
                 score += PASSED_PAWN_BONUS[advanced]
+
+            # Pawns stacked on one file block each other
+            if files[file_index] > 1:
+                score -= DOUBLED_PAWN_PENALTY
+
+            # No friendly pawn on either neighbouring file to defend it
+            left = files[file_index - 1] if file_index > 0 else 0
+            right = files[file_index + 1] if file_index < 7 else 0
+            if left == 0 and right == 0:
+                score -= ISOLATED_PAWN_PENALTY
 
         return score
     
