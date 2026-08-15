@@ -77,6 +77,9 @@ ROOK_HALF_OPEN_FILE_BONUS = 10
 
 # Values used when playing out an exchange. The king is given a huge value
 # so it is only ever used as a last resort recapture.
+# Captures that lose material are ordered below every quiet move
+LOSING_CAPTURE_SCORE = -1000
+
 SEE_PIECE_VALUES = {
     chess.PAWN: 100,
     chess.KNIGHT: 320,
@@ -227,22 +230,30 @@ def static_exchange_eval(board, move):
 
 
 def cheapest_attacker_move(board, target, color):
-    """The least valuable legal capture of target by color, if any"""
-    best_move = None
-    best_value = None
+    """The least valuable legal capture of target by color, if any
 
-    for move in board.legal_moves:
-        if move.to_square != target:
-            continue
-        piece = board.piece_at(move.from_square)
-        if piece is None or piece.color != color:
-            continue
-        value = SEE_PIECE_VALUES[piece.piece_type]
-        if best_value is None or value < best_value:
-            best_value = value
-            best_move = move
+    Asking the board which pieces attack the square is far cheaper than
+    generating every legal move and filtering, which matters because this
+    runs for each step of every exchange the search looks at.
+    """
+    candidates = []
+    for square in board.attackers(color, target):
+        piece = board.piece_at(square)
+        if piece is not None:
+            candidates.append((SEE_PIECE_VALUES[piece.piece_type], square))
 
-    return best_move
+    # Cheapest first, but attackers() ignores pins so legality still counts
+    for _, square in sorted(candidates):
+        move = chess.Move(square, target)
+        if board.is_legal(move):
+            return move
+
+        # A pawn reaching the last rank has to promote to be legal
+        promotion = chess.Move(square, target, promotion=chess.QUEEN)
+        if board.is_legal(promotion):
+            return promotion
+
+    return None
 
 
 def is_passed_pawn(square, color, enemy_pawns):
@@ -440,12 +451,15 @@ class KnightmareBot:
         for move in moves:
             score = 0
             
-            # Captures - MVV-LVA
+            # Captures, ranked by what the whole exchange actually wins.
+            # MVV-LVA alone rates QxP highly even when the pawn is defended;
+            # playing the exchange out sorts those below the quiet moves.
             if board.is_capture(move):
-                victim = board.piece_at(move.to_square)
-                attacker = board.piece_at(move.from_square)
-                if victim and attacker:
-                    score += 1000 + PIECE_VALUES[victim.piece_type] - PIECE_VALUES[attacker.piece_type]//10
+                exchange = static_exchange_eval(board, move)
+                if exchange >= 0:
+                    score += 1000 + exchange
+                else:
+                    score += LOSING_CAPTURE_SCORE + exchange
             
             # Promotions
             if move.promotion:
@@ -517,7 +531,13 @@ class KnightmareBot:
                 return stand_pat
             beta = min(beta, stand_pat)
 
-        captures = [m for m in board.legal_moves if board.is_capture(m) or m.promotion]
+        # Captures that lose material are not worth resolving: the side to
+        # move would simply decline them and keep the stand pat score.
+        captures = [
+            m for m in board.legal_moves
+            if (m.promotion or board.is_capture(m))
+            and (m.promotion or static_exchange_eval(board, m) >= 0)
+        ]
         if not captures:
             return stand_pat
 
