@@ -123,7 +123,7 @@ class ChessEngine:
                     return None
                 try:
                     return chess.Move.from_uci(move_uci)
-                except:
+                except ValueError:
                     print(f"Invalid move from {self.name}: {move_uci}")
                     return None
 
@@ -135,7 +135,8 @@ class ChessEngine:
             self.process.terminate()
             try:
                 self.process.wait(timeout=2)
-            except:
+            except subprocess.TimeoutExpired:
+                # Ignored the terminate, so stop it the hard way
                 self.process.kill()
 
 def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):

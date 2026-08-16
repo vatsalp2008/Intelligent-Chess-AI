@@ -104,7 +104,7 @@ def test_position(bot_path, fen, expected_different=True):
                 print(f"  ✓ Move is legal")
             else:
                 print(f"  ✗ Move is ILLEGAL!")
-        except:
+        except ValueError:
             print(f"  ✗ Invalid move format!")
     else:
         print(f"  ✓ Bot gives different moves: {moves}")
