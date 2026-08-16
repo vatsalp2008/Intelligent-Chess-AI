@@ -17,6 +17,9 @@ Intelligent-Chess-AI/
 │   ├── test_evaluation.py    # Evaluation & Search Unit Tests
 │   ├── test_search_safety.py # Legal-move Regression Tests
 │   ├── selfplay.py           # Measure a Change Against a Saved Engine
+│   ├── benchmark_stockfish.py# External Strength Baseline
+│   ├── tactics.py            # Positions With a Known Best Move
+│   ├── bot_loader.py         # Shared Engine Loading for the Web UIs
 │   ├── test_bots.py          # UCI Protocol Smoke Test
 │   └── ...
 ├── llm_agent/                # LLM-based Bots (Ollama)
@@ -68,7 +71,9 @@ An intelligent chess AI implementing minimax with alpha-beta pruning.
 | Static exchange evaluation | `static_exchange_eval` | Plays an exchange out with the cheapest attacker each time, so the engine knows QxP is bad when the pawn is defended without searching it. Drives capture ordering and quiescence pruning. |
 | Check extensions | `minimax` | Being in check is forced, so the search goes one ply further rather than stopping mid-sequence. |
 | Transposition table | `store_tt` | Keyed on position and depth. Entries record whether the score is exact or only a bound, and are reused only when they still settle the current window. Mate scores are never cached because they are relative to the ply they were found at. |
-| Move ordering | `order_moves` | Captures ranked by exchange value, promotions, checks, killer moves, history heuristic, then central squares. Losing captures sort below every quiet move. |
+| Move ordering | `order_moves` | The best move from a previous search of the position first, then captures ranked by exchange value, promotions, checks, killer moves, history heuristic, and central squares. Losing captures sort below every quiet move. |
+| Null move pruning | `minimax` | Past depth 4, checks whether giving the opponent a free move still wins; if so the branch is cut. Skipped in check and when the side to move has only pawns, where passing would be misleading. |
+| Time management | `get_move` | Predicts the next iteration's cost from the previous one and stops rather than starting a depth it cannot finish. |
 | Principal variation | `extract_pv` | The expected line is read back out of the table and reported on each `info` line. |
 | Mate distance | `evaluate` | Mate scores shrink with depth, so a mate in 1 outranks a mate in 4. |
 
@@ -90,6 +95,31 @@ python selfplay.py /tmp/old_bot.py --depth 3
 
 Fixed depth rather than fixed time keeps the result reproducible. As a
 sanity check, an engine played against an identical copy scores 50%.
+
+Use `--seconds` instead when the change was about speed. A faster search
+cannot change what a fixed-depth search returns, so ordering and pruning
+work only shows up under a clock.
+
+Self play cannot say how strong the engine actually is, because both sides
+share the same blind spots. For that, `benchmark_stockfish.py` plays an
+independent opponent held to a small fixed depth:
+
+```bash
+cd classic_agent
+python benchmark_stockfish.py --skill-depth 2
+python benchmark_stockfish.py --ladder
+```
+
+Knightmare at depth 3 scores around 46% against Stockfish limited to depth
+2. Six games per rung turned out to be far too noisy to compare rungs, so
+the default is the full twelve game set.
+
+`tactics.py` complements both: each position has one clearly correct move,
+so a failure names the specific weakness rather than just a lower score.
+
+```bash
+python tactics.py --verbose
+```
 
 ### Time control
 
@@ -131,7 +161,10 @@ pip install -r requirements-dev.txt
 
 cd classic_agent
 python -m unittest test_evaluation     # evaluation, search and UCI parsing
-python -m unittest test_search_safety  # always returns a legal move
+python -m unittest test_search_safety  # legal moves and time budget
+python -m unittest test_tournament     # tournament runner and scoring
+python -m unittest test_bot_loader     # shared engine loading fallbacks
+python tactics.py                      # positions with a known best move
 python test_bots.py                    # UCI protocol smoke test
 python diagnose_knight.py              # per-position search diagnostics
 
