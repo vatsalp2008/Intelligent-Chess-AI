@@ -83,6 +83,12 @@ KING_SHIELD_PENALTY = 12
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
+# Shallowest depth at which a null move search is worth trying
+NULL_MOVE_MIN_DEPTH = 4
+
+# Plies shaved off the null move search, since it only needs to be a probe
+NULL_MOVE_REDUCTION = 2
+
 # The best move from a previous search of this position, tried before all else
 TT_MOVE_SCORE = 10000
 
@@ -422,6 +428,19 @@ class KnightmareBot:
 
         return pv
 
+    def has_pieces_for_null_move(self, board):
+        """True when the side to move has more than just king and pawns
+
+        With only pawns left, being forced to move is often a real
+        disadvantage, and pretending a free pass is available gives a
+        badly wrong answer.
+        """
+        colour = board.turn
+        pieces = (
+            board.knights | board.bishops | board.rooks | board.queens
+        ) & board.occupied_co[colour]
+        return chess.popcount(pieces) > 0
+
     def is_endgame(self, board):
         """True once the heavy pieces have largely left the board
 
@@ -739,6 +758,30 @@ class KnightmareBot:
             shallower = self.transposition_table.get((tt_key[0], depth - 1))
             if shallower is not None:
                 tt_move = shallower[1]
+
+        # Null move pruning: if handing the opponent a free move still
+        # leaves the position winning, the real move will be at least as
+        # good and this branch can be cut without searching it.
+        #
+        # Skipped in check (passing would be illegal) and in near-pawn-only
+        # endgames, where passing is often genuinely good and the shortcut
+        # misjudges zugzwang.
+        if (
+            not in_check
+            and depth >= NULL_MOVE_MIN_DEPTH
+            and self.has_pieces_for_null_move(board)
+        ):
+            board.push(chess.Move.null())
+            null_score, _ = self.minimax(
+                board, depth - 1 - NULL_MOVE_REDUCTION, alpha, beta,
+                not maximizing, ply + 1,
+            )
+            board.pop()
+
+            if maximizing and null_score >= beta:
+                return null_score, None
+            if not maximizing and null_score <= alpha:
+                return null_score, None
 
         moves = list(board.legal_moves)
         if not moves:
