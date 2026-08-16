@@ -9,7 +9,6 @@ import chess
 import sys
 import random
 import time
-import traceback
 
 # Piece values
 PIECE_VALUES = {

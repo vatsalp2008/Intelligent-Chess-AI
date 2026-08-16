@@ -13,7 +13,6 @@ import random
 import shutil
 import threading
 import time
-import sys
 import os
 
 from bot_loader import best_move, load_bot_class, random_move

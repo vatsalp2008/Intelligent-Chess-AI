@@ -4,12 +4,11 @@ Simple Web Chess Interface - Direct Integration
 Works directly with the Knightmare bot code without UCI
 """
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify
 import argparse
 import chess
 import chess.svg
 import random
-import sys
 import os
 
 # Default port for this interface

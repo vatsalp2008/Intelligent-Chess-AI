@@ -10,7 +10,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, Circle
-import sys
 
 def simple_evaluate(board):
     """Simple evaluation function for visualization

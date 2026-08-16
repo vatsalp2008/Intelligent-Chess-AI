@@ -9,7 +9,6 @@ import chess
 import sys
 import random
 import time
-from collections import defaultdict
 
 # Enhanced piece values
 PIECE_VALUES = {
