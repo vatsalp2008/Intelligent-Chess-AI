@@ -1040,10 +1040,11 @@ def parse_position(line):
                 for uci_str in parts[moves_idx:]:
                     try:
                         move = chess.Move.from_uci(uci_str)
-                        if move in board.legal_moves:
-                            board.push(move)
-                    except:
+                    except ValueError:
                         break
+                    if move not in board.legal_moves:
+                        break
+                    board.push(move)
         
         elif "fen" in parts:
             fen_idx = parts.index("fen") + 1
@@ -1063,13 +1064,15 @@ def parse_position(line):
                 for uci_str in parts[moves_idx:]:
                     try:
                         move = chess.Move.from_uci(uci_str)
-                        if move in board.legal_moves:
-                            board.push(move)
-                    except:
+                    except ValueError:
                         break
-    except:
+                    if move not in board.legal_moves:
+                        break
+                    board.push(move)
+    except ValueError:
+        # Unparseable FEN or command, fall back to the initial position
         board = chess.Board()
-    
+
     return board
 
 def main():
@@ -1143,5 +1146,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except:
+    except (KeyboardInterrupt, EOFError):
+        # A host closing the pipe or a user interrupting is a normal exit
         sys.exit(0)
