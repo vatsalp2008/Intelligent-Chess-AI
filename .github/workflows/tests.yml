@@ -36,6 +36,10 @@ jobs:
         working-directory: classic_agent
         run: python -m unittest discover -p "test_search_safety.py" -v
 
+      - name: Run engine loader tests
+        working-directory: classic_agent
+        run: python -m unittest discover -p "test_bot_loader.py" -v
+
       - name: Run tactical regression suite
         # Exits non-zero if the engine stops solving a position it used to
         working-directory: classic_agent
