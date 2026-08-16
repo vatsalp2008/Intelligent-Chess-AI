@@ -569,6 +569,55 @@ class TestStaticExchangeEvaluation(unittest.TestCase):
         self.assertEqual(quiet, bot.evaluate(board, 0))
 
 
+class TestTranspositionMoveOrdering(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_stored_move_is_tried_first(self):
+        board = chess.Board()
+        quiet = chess.Move.from_uci("a2a3")  # normally ordered near the back
+        ordered = self.bot.order_moves(board, list(board.legal_moves), tt_move=quiet)
+        self.assertEqual(ordered[0], quiet)
+
+    def test_stored_move_outranks_a_winning_capture(self):
+        """It was best last time, so it is worth looking at before anything"""
+        board = chess.Board("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1")
+        quiet = chess.Move.from_uci("e1e2")
+        ordered = self.bot.order_moves(board, list(board.legal_moves), tt_move=quiet)
+        self.assertEqual(ordered[0], quiet)
+
+    def test_no_stored_move_leaves_ordering_alone(self):
+        board = chess.Board("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1")
+        ordered = self.bot.order_moves(board, list(board.legal_moves), tt_move=None)
+        self.assertEqual(ordered[0], chess.Move.from_uci("e4d5"))
+
+    def test_ordering_still_keeps_every_move(self):
+        board = chess.Board()
+        moves = list(board.legal_moves)
+        ordered = self.bot.order_moves(board, moves, tt_move=chess.Move.from_uci("a2a3"))
+        self.assertCountEqual(ordered, moves)
+
+    def test_a_stored_move_not_in_the_list_is_harmless(self):
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        moves = list(board.legal_moves)
+        ordered = self.bot.order_moves(board, moves, tt_move=chess.Move.from_uci("h7h8"))
+        self.assertCountEqual(ordered, moves)
+
+    def test_ordering_does_not_change_the_search_result(self):
+        """Ordering may only change speed, never the value returned"""
+        fen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        board = chess.Board(fen)
+
+        with_tt = KnightmareBot()
+        score_a, _ = with_tt.minimax(board.copy(), 3, -INFINITY, INFINITY, True)
+
+        without_tt = KnightmareBot()
+        without_tt.store_tt = lambda *args, **kwargs: None
+        score_b, _ = without_tt.minimax(board.copy(), 3, -INFINITY, INFINITY, True)
+
+        self.assertEqual(score_a, score_b)
+
+
 class TestQuiescence(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareBot()
