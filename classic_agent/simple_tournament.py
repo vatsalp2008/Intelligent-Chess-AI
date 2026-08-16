@@ -5,7 +5,9 @@ No dependency on chester library
 """
 
 import argparse
+import queue
 import subprocess
+import threading
 import chess
 import chess.pgn
 import time
@@ -20,6 +22,8 @@ class ChessEngine:
         self.path = path
         self.name = name
         self.process = None
+        self.output = queue.Queue()
+        self.reader = None
         
     def start(self):
         """Start the engine process"""
@@ -29,9 +33,13 @@ class ChessEngine:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            bufsize=0
+            bufsize=1
         )
-        
+
+        # A daemon thread so a wedged engine cannot keep the process alive
+        self.reader = threading.Thread(target=self._pump_output, daemon=True)
+        self.reader.start()
+
         # Send UCI initialization
         self.send("uci")
         self.wait_for("uciok")
@@ -47,20 +55,47 @@ class ChessEngine:
         except (BrokenPipeError, ValueError) as exc:
             raise EngineDied(f"{self.name} is not accepting input: {exc}") from exc
         
+    def _pump_output(self):
+        """Move engine output into the queue until the pipe closes"""
+        for line in self.process.stdout:
+            self.output.put(line)
+        self.output.put(None)  # sentinel: the engine closed its output
+
+    def read_line(self, deadline):
+        """One line of engine output, or None if nothing arrives in time
+
+        readline() blocks until a newline appears, so an engine that is
+        running but not answering would hang the tournament forever.
+        Selecting on the pipe does not work either, because the text
+        reader buffers ahead and leaves the pipe looking empty while a
+        line is already in hand. A reader thread avoids both problems.
+        """
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return None
+
+        try:
+            line = self.output.get(timeout=remaining)
+        except queue.Empty:
+            return None
+
+        if line is None:
+            raise EngineDied(f"{self.name} closed its output")
+        return line
+
     def wait_for(self, response, timeout=5):
         """Wait for specific response
 
-        A dead engine leaves readline() returning '' immediately, so give
-        up on end of file rather than spinning until the timeout expires.
+        Gives up both on end of file, meaning the engine exited, and on the
+        timeout, meaning it is alive but not answering.
         """
-        start = time.time()
-        while time.time() - start < timeout:
-            raw = self.process.stdout.readline()
-            if raw == "":
-                raise EngineDied(f"{self.name} exited while waiting for {response}")
+        deadline = time.time() + timeout
+        while True:
+            raw = self.read_line(deadline)
+            if raw is None:
+                raise TimeoutError(f"Timeout waiting for {response} from {self.name}")
             if response in raw.strip():
                 return raw.strip()
-        raise TimeoutError(f"Timeout waiting for {response} from {self.name}")
     
     def get_move(self, board, time_ms=1000):
         """Get a move for the current position"""
@@ -75,11 +110,12 @@ class ChessEngine:
         self.send(f"go movetime {time_ms}")
         
         # Wait for bestmove
-        start = time.time()
-        while time.time() - start < (time_ms/1000 + 2):
-            raw = self.process.stdout.readline()
-            if raw == "":
-                raise EngineDied(f"{self.name} exited before answering go")
+        deadline = time.time() + (time_ms / 1000 + 2)
+        while True:
+            raw = self.read_line(deadline)
+            if raw is None:
+                # Alive but not answering, so give up on this move
+                return None
             line = raw.strip()
             if line.startswith("bestmove"):
                 move_uci = line.split()[1]
@@ -90,9 +126,7 @@ class ChessEngine:
                 except:
                     print(f"Invalid move from {self.name}: {move_uci}")
                     return None
-        
-        return None
-    
+
     def quit(self):
         """Quit the engine"""
         if self.process:
