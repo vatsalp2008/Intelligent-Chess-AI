@@ -75,8 +75,6 @@ ROOK_OPEN_FILE_BONUS = 20
 # Rook on a file holding only enemy pawns
 ROOK_HALF_OPEN_FILE_BONUS = 10
 
-# Values used when playing out an exchange. The king is given a huge value
-# so it is only ever used as a last resort recapture.
 # Charged per file around the king with no friendly pawn on it
 KING_SHIELD_PENALTY = 12
 
@@ -95,6 +93,8 @@ TT_MOVE_SCORE = 10000
 # Captures that lose material are ordered below every quiet move
 LOSING_CAPTURE_SCORE = -1000
 
+# Values used when playing out an exchange. The king is given a huge value
+# so it is only ever used as a last resort recapture.
 SEE_PIECE_VALUES = {
     chess.PAWN: 100,
     chess.KNIGHT: 320,
