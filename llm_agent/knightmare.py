@@ -29,6 +29,9 @@ TT_UPPER = "upper"   # true value is at most score (search cut off low)
 # Stop growing the table past this many entries
 TT_MAX_ENTRIES = 200000
 
+# Extra plies of captures resolved past the main search horizon
+QUIESCENCE_DEPTH = 4
+
 # Simplified piece-square tables
 def get_piece_square_value(piece_type, square, color, endgame=False):
     """Get positional value for a piece on a square"""
@@ -175,13 +178,63 @@ class KnightmareFast:
         move_scores.sort(key=lambda x: x[1], reverse=True)
         return [move for move, _ in move_scores]
     
+    def quiesce(self, board, alpha, beta, depth=QUIESCENCE_DEPTH):
+        """Keep resolving captures before scoring the position
+
+        Stopping in the middle of a trade reads the position as if the
+        recapture will never happen, which makes the engine hang pieces.
+        """
+        self.nodes += 1
+
+        if board.is_game_over():
+            return self.evaluate_board(board)
+
+        stand_pat = self.evaluate_board(board)
+        if depth == 0:
+            return stand_pat
+
+        white_to_move = board.turn == chess.WHITE
+
+        # The side to move can always decline and keep the standing score
+        if white_to_move:
+            if stand_pat >= beta:
+                return stand_pat
+            alpha = max(alpha, stand_pat)
+        else:
+            if stand_pat <= alpha:
+                return stand_pat
+            beta = min(beta, stand_pat)
+
+        captures = [m for m in board.legal_moves if board.is_capture(m) or m.promotion]
+        if not captures:
+            return stand_pat
+
+        for move in self.order_moves(board, captures):
+            board.push(move)
+            score = self.quiesce(board, alpha, beta, depth - 1)
+            board.pop()
+
+            if white_to_move:
+                if score >= beta:
+                    return score
+                alpha = max(alpha, score)
+            else:
+                if score <= alpha:
+                    return score
+                beta = min(beta, score)
+
+        return alpha if white_to_move else beta
+
     def minimax(self, board, depth, alpha, beta, maximizing):
         """Simple minimax with alpha-beta pruning"""
         self.nodes += 1
 
         # Terminal conditions
-        if depth == 0 or board.is_game_over():
+        if board.is_game_over():
             return self.evaluate_board(board), None
+
+        if depth == 0:
+            return self.quiesce(board, alpha, beta), None
 
         # Reuse an earlier search of this position when the stored score
         # still decides the current window. Values from a cut-off search
