@@ -53,12 +53,22 @@ POSITIONS = [
 
     ("avoid stalemate when winning", "7k/5Q2/8/8/8/8/8/6K1 w - - 0 1",
      None, "many wins available, must not stalemate"),
+
+    ("take undefended rook", "3r4/8/4k3/8/8/8/8/3QK3 w - - 0 1",
+     ["d1d8"], "the rook on d8 is not defended, so it is simply free"),
+
+    ("decline defended rook", "3rk3/8/8/8/8/8/8/3QK3 w - - 0 1",
+     None, "Qxd8 is met by Kxd8, trading a queen for a rook"),
+
+    ("keep the extra queen", "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
+     None, "a won position, must not give the queen away"),
 ]
 
 # Moves the engine must never play in these positions
 FORBIDDEN = {
     "do not take defended pawn": ["d1d5"],
     "avoid stalemate when winning": ["f7g6", "f7f8"],
+    "decline defended rook": ["d1d8"],
 }
 
 
