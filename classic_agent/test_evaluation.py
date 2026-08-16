@@ -670,6 +670,75 @@ class TestNullMovePruning(unittest.TestCase):
         self.assertIn(self.bot.get_move(board, 600.0, 4), board.legal_moves)
 
 
+class TestTranspositionBounds(unittest.TestCase):
+    """A cached score is only reusable if its bound type is right
+
+    A node that never cuts off can still have failed low against the alpha
+    it was given, in which case the score is an upper bound rather than the
+    exact value. Storing it as exact makes narrow-window searches disagree
+    with full-window ones.
+    """
+
+    FENS = [
+        "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        "8/5k2/8/3K4/8/8/4P3/8 w - - 0 1",
+    ]
+
+    def full_window_score(self, fen, depth):
+        board = chess.Board(fen)
+        bot = KnightmareBot()
+        score, _ = bot.minimax(board, depth, -INFINITY, INFINITY, board.turn == chess.WHITE)
+        return score
+
+    def test_narrow_window_agrees_with_full_window(self):
+        """A window that brackets the true score must return it exactly"""
+        for fen in self.FENS:
+            truth = self.full_window_score(fen, 3)
+            for margin in (25, 50, 100):
+                with self.subTest(fen=fen, margin=margin):
+                    board = chess.Board(fen)
+                    bot = KnightmareBot()
+                    score, _ = bot.minimax(
+                        board, 3, truth - margin, truth + margin,
+                        board.turn == chess.WHITE,
+                    )
+                    self.assertEqual(score, truth)
+
+    def test_fail_low_is_stored_as_an_upper_bound(self):
+        """Searching with an unreachably high window must not cache 'exact'"""
+        board = chess.Board(self.FENS[0])
+        bot = KnightmareBot()
+        # Everything will fail low against this alpha
+        bot.minimax(board, 2, INFINITY - 1, INFINITY, True)
+
+        exact_entries = [
+            entry for entry in bot.transposition_table.values()
+            if entry[2] == "exact"
+        ]
+        self.assertEqual(exact_entries, [], "fail-low results must not be exact")
+
+    def test_fail_high_is_stored_as_a_lower_bound(self):
+        board = chess.Board(self.FENS[0])
+        bot = KnightmareBot()
+        # Everything will fail high against this beta
+        bot.minimax(board, 2, -INFINITY, -INFINITY + 1, True)
+
+        exact_entries = [
+            entry for entry in bot.transposition_table.values()
+            if entry[2] == "exact"
+        ]
+        self.assertEqual(exact_entries, [], "fail-high results must not be exact")
+
+    def test_full_window_still_produces_exact_entries(self):
+        board = chess.Board(self.FENS[0])
+        bot = KnightmareBot()
+        bot.minimax(board, 2, -INFINITY, INFINITY, True)
+
+        flags = {entry[2] for entry in bot.transposition_table.values()}
+        self.assertIn("exact", flags)
+
+
 class TestQuiescence(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareBot()
