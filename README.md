@@ -17,7 +17,7 @@ Intelligent-Chess-AI/
 │   ├── test_evaluation.py    # Evaluation & Search Unit Tests
 │   ├── test_search_safety.py # Legal-move Regression Tests
 │   ├── selfplay.py           # Measure a Change Against a Saved Engine
-│   ├── benchmark_stockfish.py# External Strength Baseline
+│   ├── benchmark_stockfish.py # External Strength Baseline
 │   ├── tactics.py            # Positions With a Known Best Move
 │   ├── bot_loader.py         # Shared Engine Loading for the Web UIs
 │   ├── test_bots.py          # UCI Protocol Smoke Test

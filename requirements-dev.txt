@@ -9,3 +9,12 @@
 #     cd llm_agent && python -m unittest test_knightmare
 
 chess==1.11.2
+
+# benchmark_stockfish.py additionally needs a Stockfish binary on PATH,
+# which is not a Python package:
+#
+#     brew install stockfish          # macOS
+#     sudo apt-get install stockfish  # Debian/Ubuntu
+#
+# Set STOCKFISH_PATH if it lives somewhere unusual. Everything else,
+# including the whole test suite, runs without it.
