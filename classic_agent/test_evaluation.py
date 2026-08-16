@@ -618,6 +618,58 @@ class TestTranspositionMoveOrdering(unittest.TestCase):
         self.assertEqual(score_a, score_b)
 
 
+class TestNullMovePruning(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_side_with_pieces_may_use_null_move(self):
+        board = chess.Board()
+        self.assertTrue(self.bot.has_pieces_for_null_move(board))
+
+    def test_king_and_pawns_only_may_not(self):
+        """Passing is often good in a pawn endgame, so the shortcut is unsafe"""
+        board = chess.Board("4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3 w - - 0 1")
+        self.assertFalse(self.bot.has_pieces_for_null_move(board))
+
+    def test_bare_king_may_not(self):
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        self.assertFalse(self.bot.has_pieces_for_null_move(board))
+
+    def test_each_side_is_judged_on_its_own_material(self):
+        """White has a rook, Black has only pawns"""
+        fen = "4k3/pppppppp/8/8/8/8/8/R3K3 w - - 0 1"
+        white_to_move = chess.Board(fen)
+        black_to_move = chess.Board(fen.replace(" w ", " b "))
+        self.assertTrue(self.bot.has_pieces_for_null_move(white_to_move))
+        self.assertFalse(self.bot.has_pieces_for_null_move(black_to_move))
+
+    def test_pruning_keeps_the_same_move_in_quiet_positions(self):
+        """A shortcut that changed the answer would not be worth having"""
+        fens = [
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        ]
+        for fen in fens:
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+
+                with_null = KnightmareBot().get_move(board.copy(), 600.0, 4)
+
+                without_null = KnightmareBot()
+                without_null.has_pieces_for_null_move = lambda b: False
+                plain = without_null.get_move(board.copy(), 600.0, 4)
+
+                self.assertEqual(with_null, plain)
+
+    def test_still_finds_mate_with_pruning_on(self):
+        board = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1")
+        self.assertEqual(self.bot.get_move(board, 600.0, 4), chess.Move.from_uci("e1e8"))
+
+    def test_search_still_returns_legal_moves(self):
+        board = chess.Board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+        self.assertIn(self.bot.get_move(board, 600.0, 4), board.legal_moves)
+
+
 class TestQuiescence(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareBot()
