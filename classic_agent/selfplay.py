@@ -7,11 +7,18 @@ Point it at a saved copy of the engine (for example one written out with
 `git show HEAD~1:classic_agent/knightmare_bot.py > old_bot.py`) and it
 plays a match, alternating colours from a spread of standard openings.
 
-Searches run to a fixed depth rather than a time limit, so results are
-reproducible instead of depending on how busy the machine is.
+Searches run to a fixed depth by default, so results are reproducible
+instead of depending on how busy the machine is.
+
+Use --seconds when the change was about speed rather than about what the
+search returns. Better move ordering, for instance, cannot change the
+result of a fixed-depth search at all; it only shows up when the clock is
+what stops the search. Timed matches are slow and less reproducible, so
+prefer fixed depth unless speed is the thing being measured.
 
     python3 selfplay.py old_bot.py
     python3 selfplay.py old_bot.py --depth 4
+    python3 selfplay.py old_bot.py --seconds 0.5
     python3 selfplay.py old_bot.py --quiet
 """
 
@@ -40,6 +47,9 @@ OPENINGS = [
 # Generous ceiling so the depth limit is what actually stops the search
 NO_TIME_LIMIT = 600.0
 
+# Depth ceiling when the clock is what should stop the search
+MAX_DEPTH_WHEN_TIMED = 6
+
 
 def load_engine(path, name):
     """Import an engine module from an arbitrary file path"""
@@ -50,15 +60,23 @@ def load_engine(path, name):
     return module
 
 
-def play_game(white_bot, black_bot, opening, depth, max_plies=160):
-    """Play one game and return a PGN style result string"""
+def play_game(white_bot, black_bot, opening, depth, seconds=None, max_plies=160):
+    """Play one game and return a PGN style result string
+
+    With seconds set, both sides get that long per move and depth becomes
+    only a ceiling. That is the regime where faster search turns into
+    better play; at a fixed depth a speedup changes nothing.
+    """
     board = chess.Board()
     for uci in opening:
         board.push(chess.Move.from_uci(uci))
 
     while not board.is_game_over() and len(board.move_stack) < max_plies:
         bot = white_bot if board.turn == chess.WHITE else black_bot
-        move = bot.get_move(board, NO_TIME_LIMIT, depth)
+        if seconds is None:
+            move = bot.get_move(board, NO_TIME_LIMIT, depth)
+        else:
+            move = bot.get_move(board, seconds, MAX_DEPTH_WHEN_TIMED)
 
         # Failing to produce a legal move loses the game
         if move is None or move not in board.legal_moves:
@@ -71,7 +89,7 @@ def play_game(white_bot, black_bot, opening, depth, max_plies=160):
     return "1/2-1/2"
 
 
-def run_match(new_module, old_module, depth, verbose=True):
+def run_match(new_module, old_module, depth, seconds=None, verbose=True):
     """Play every opening from both sides, returning (new_score, games)"""
     new_score = 0.0
     games = 0
@@ -83,9 +101,9 @@ def run_match(new_module, old_module, depth, verbose=True):
             old_bot = old_module.KnightmareBot()
 
             if new_is_white:
-                result = play_game(new_bot, old_bot, opening, depth)
+                result = play_game(new_bot, old_bot, opening, depth, seconds)
             else:
-                result = play_game(old_bot, new_bot, opening, depth)
+                result = play_game(old_bot, new_bot, opening, depth, seconds)
 
             if result == "1/2-1/2":
                 new_score += 0.5
@@ -111,6 +129,8 @@ def parse_args():
     parser.add_argument("baseline", help="path to the engine to play against")
     parser.add_argument("--depth", type=int, default=3,
                         help="fixed search depth for both sides (default: 3)")
+    parser.add_argument("--seconds", type=float, default=None, metavar="S",
+                        help="give each side S seconds per move instead of a fixed depth")
     parser.add_argument("--quiet", action="store_true", help="only print the final score")
     return parser.parse_args()
 
@@ -121,10 +141,15 @@ def main():
     new_module = load_engine("knightmare_bot.py", "engine_new")
     old_module = load_engine(args.baseline, "engine_old")
 
-    print(f"Current engine vs {args.baseline} at depth {args.depth}")
+    if args.seconds is None:
+        setting = f"depth {args.depth}"
+    else:
+        setting = f"{args.seconds}s per move"
+    print(f"Current engine vs {args.baseline} at {setting}")
     print("=" * 60)
 
-    score, games = run_match(new_module, old_module, args.depth, verbose=not args.quiet)
+    score, games = run_match(new_module, old_module, args.depth,
+                             seconds=args.seconds, verbose=not args.quiet)
 
     print("=" * 60)
     percent = 100 * score / games
