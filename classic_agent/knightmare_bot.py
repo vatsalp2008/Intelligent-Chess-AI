@@ -83,6 +83,9 @@ KING_SHIELD_PENALTY = 12
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
+# The best move from a previous search of this position, tried before all else
+TT_MOVE_SCORE = 10000
+
 # Captures that lose material are ordered below every quiet move
 LOSING_CAPTURE_SCORE = -1000
 
@@ -575,13 +578,21 @@ class KnightmareBot:
 
         return score
     
-    def order_moves(self, board, moves, ply=0):
-        """Simple but effective move ordering"""
+    def order_moves(self, board, moves, ply=0, tt_move=None):
+        """Simple but effective move ordering
+
+        A move that was best here in an earlier, shallower search is the
+        single most likely move to be best again, so it is tried first.
+        """
         scored = []
-        
+
         for move in moves:
             score = 0
-            
+
+            # The stored best move from a previous iteration
+            if tt_move is not None and move == tt_move:
+                score += TT_MOVE_SCORE
+
             # Captures, ranked by what the whole exchange actually wins.
             # MVV-LVA alone rates QxP highly even when the pawn is defended;
             # playing the exchange out sorts those below the quiet moves.
@@ -709,6 +720,7 @@ class KnightmareBot:
         # entry is only reusable when it still settles the current window.
         tt_key = (board._transposition_key(), depth)
         cached = self.transposition_table.get(tt_key)
+        tt_move = None
         if cached is not None:
             score, move, flag = cached
             if flag == TT_EXACT:
@@ -717,13 +729,23 @@ class KnightmareBot:
                 return score, move
             if flag == TT_UPPER and score <= alpha:
                 return score, move
+            # The score was not usable here, but the move it came from is
+            # still the best guess for what to try first
+            tt_move = move
+
+        # Iterative deepening leaves an entry from the previous, shallower
+        # pass for this position, which is an even better first guess
+        if tt_move is None:
+            shallower = self.transposition_table.get((tt_key[0], depth - 1))
+            if shallower is not None:
+                tt_move = shallower[1]
 
         moves = list(board.legal_moves)
         if not moves:
             return self.evaluate(board, ply), None
 
         # Order moves
-        moves = self.order_moves(board, moves, ply)
+        moves = self.order_moves(board, moves, ply, tt_move)
 
         best_move = moves[0]
 
