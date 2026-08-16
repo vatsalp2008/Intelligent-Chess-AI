@@ -36,6 +36,11 @@ jobs:
         working-directory: classic_agent
         run: python -m unittest discover -p "test_search_safety.py" -v
 
+      - name: Run tactical regression suite
+        # Exits non-zero if the engine stops solving a position it used to
+        working-directory: classic_agent
+        run: python tactics.py
+
       - name: Run LLM agent search tests
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
