@@ -17,11 +17,14 @@ around rather than getting steadily harder.
     python3 benchmark_stockfish.py --skill-depth 2 --games 6
     python3 benchmark_stockfish.py --ladder
 
-Reference point, Knightmare searching to depth 3 over 6 games:
+Results are noisy: six games per rung produced 42/42/25 on one run and
+58/25/50 on another, which is mostly sampling noise rather than a real
+difference. Use the full opening set, and treat a single rung as a rough
+band rather than a precise number.
 
-    Stockfish depth 1   42%
-    Stockfish depth 2   42%
-    Stockfish depth 3   25%
+Reference point, Knightmare at depth 3 over the full 12 game set:
+
+    Stockfish depth 2   46%
 """
 
 import argparse
@@ -128,8 +131,8 @@ def parse_args():
                         help="Stockfish Skill Level 0-20 (default: 20, full strength)")
     parser.add_argument("--skill-depth", type=int, default=2,
                         help="depth limit for Stockfish (default: 2)")
-    parser.add_argument("--games", type=int, default=6,
-                        help="games to play (default: 6)")
+    parser.add_argument("--games", type=int, default=2 * len(OPENINGS),
+                        help=f"games to play (default: {2 * len(OPENINGS)}, the full set)")
     parser.add_argument("--ladder", action="store_true",
                         help="sweep several skill depths to find where we break even")
     parser.add_argument("--quiet", action="store_true", help="only print totals")
