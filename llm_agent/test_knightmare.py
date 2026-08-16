@@ -94,6 +94,47 @@ class TestSearchQuality(unittest.TestCase):
         self.assertIsNone(self.bot.get_best_move(board, 1.0))
 
 
+class TestQuiescence(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareFast()
+        # Qxd5 wins a pawn but hangs the queen to cxd5
+        self.after_bad_capture = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        self.after_bad_capture.push(chess.Move.from_uci("d1d5"))
+
+    def test_resolves_the_recapture_static_eval_misses(self):
+        static = self.bot.evaluate_board(self.after_bad_capture)
+        quiet = self.bot.quiesce(self.after_bad_capture, -INFINITY, INFINITY)
+        self.assertGreater(static, 0, "static eval should look good for White")
+        self.assertLess(quiet, static, "quiescence should see the queen fall")
+
+    def test_quiet_position_returns_the_static_score(self):
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        self.assertEqual(
+            self.bot.quiesce(board, -INFINITY, INFINITY),
+            self.bot.evaluate_board(board),
+        )
+
+    def test_board_is_left_untouched(self):
+        board = chess.Board("r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4")
+        before = board.fen()
+        self.bot.quiesce(board, -INFINITY, INFINITY)
+        self.assertEqual(board.fen(), before)
+
+    def test_terminal_position_is_scored_not_searched(self):
+        board = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1")
+        self.assertTrue(board.is_checkmate())
+        self.assertEqual(
+            self.bot.quiesce(board, -INFINITY, INFINITY),
+            self.bot.evaluate_board(board),
+        )
+
+    def test_search_declines_the_losing_capture(self):
+        board = chess.Board("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1")
+        self.assertNotEqual(
+            self.bot.get_best_move(board, 2.0), chess.Move.from_uci("d1d5")
+        )
+
+
 class TestMoveOrdering(unittest.TestCase):
     def setUp(self):
         self.bot = KnightmareFast()
