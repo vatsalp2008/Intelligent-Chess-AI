@@ -24,3 +24,10 @@ venv/
 *.log
 llm_log_*.jsonl
 tournament.pgn
+
+# Baseline engines written out for selfplay.py comparisons
+old_bot.py
+baseline_*.py
+
+# Figures produced by standalone_tree_viz.py
+[0-9]_*.png
