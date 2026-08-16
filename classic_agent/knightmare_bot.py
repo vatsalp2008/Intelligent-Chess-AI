@@ -59,6 +59,9 @@ TT_UPPER = "upper"   # true value is at most score (search cut off low)
 # Stop growing the table past this many entries
 TT_MAX_ENTRIES = 200000
 
+# History entries kept before the scores are aged down
+HISTORY_MAX_ENTRIES = 5000
+
 # Rooks, queens and minors left before a position counts as an endgame
 ENDGAME_PIECE_COUNT = 6
 
@@ -885,9 +888,15 @@ class KnightmareBot:
         # Default to first legal move (will be replaced by search)
         best_move = legal_moves[0]
         
-        # Clear tables if too large
-        if len(self.history_table) > 5000:
-            self.history_table.clear()
+        # Age the history rather than wiping it. Halving keeps the ordering
+        # it has learned while letting newer cutoffs overtake stale ones,
+        # and drops entries that have decayed to nothing.
+        if len(self.history_table) > HISTORY_MAX_ENTRIES:
+            self.history_table = {
+                key: value // 2
+                for key, value in self.history_table.items()
+                if value > 1
+            }
         if len(self.transposition_table) >= TT_MAX_ENTRIES:
             self.transposition_table.clear()
         self.killer_moves.clear()  # Clear each search
