@@ -15,28 +15,12 @@ import os
 # Default port for this interface
 DEFAULT_PORT = 5001
 
-# Add the current directory to path to import knightmare_bot
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Seconds the engine may think about each move
+THINK_SECONDS = 1.0
 
-# Import the KnightmareOptimized class directly
-try:
-    # Try to import from your working knightmare_bot.py
-    import knightmare_bot
-    
-    # Find the bot class (it might be named differently)
-    bot_class = None
-    for name in dir(knightmare_bot):
-        obj = getattr(knightmare_bot, name)
-        if isinstance(obj, type) and 'Knightmare' in name:
-            bot_class = obj
-            break
-    
-    if not bot_class:
-        print("Warning: Could not find Knightmare class in knightmare_bot.py")
-        bot_class = None
-except Exception as e:
-    print(f"Warning: Could not import knightmare_bot.py: {e}")
-    bot_class = None
+from bot_loader import best_move, load_bot_class, random_move
+
+bot_class = load_bot_class()
 
 app = Flask(__name__)
 
@@ -55,43 +39,15 @@ def reset_game():
 def get_knightmare_move(board):
     """Get move from Knightmare bot"""
     global knightmare
-    
-    if not bot_class:
-        # Fallback to random if bot not available
-        moves = list(board.legal_moves)
-        return random.choice(moves) if moves else None
-    
-    try:
-        if not knightmare:
-            knightmare = bot_class()
-        
-        # Try different method names that might exist
-        if hasattr(knightmare, 'get_best_move'):
-            return knightmare.get_best_move(board.copy(), max_time=1.0)
-        elif hasattr(knightmare, 'get_move'):
-            return knightmare.get_move(board.copy(), 1.0)
-        else:
-            # Try minimax directly
-            if hasattr(knightmare, 'minimax'):
-                _, move = knightmare.minimax(
-                    board.copy(), 
-                    3,  # depth
-                    -float('inf'), 
-                    float('inf'), 
-                    board.turn == chess.WHITE
-                )
-                return move
-    except Exception as e:
-        print(f"Error getting Knightmare move: {e}")
-    
-    # Fallback to random
-    moves = list(board.legal_moves)
-    return random.choice(moves) if moves else None
+
+    if bot_class and knightmare is None:
+        knightmare = bot_class()
+
+    return best_move(knightmare, board, THINK_SECONDS)
 
 def get_random_move(board):
     """Get random move"""
-    moves = list(board.legal_moves)
-    return random.choice(moves) if moves else None
+    return random_move(board)
 
 HTML = """
 <!DOCTYPE html>

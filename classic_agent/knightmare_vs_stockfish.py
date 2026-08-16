@@ -16,27 +16,9 @@ import time
 import sys
 import os
 
-# Add the current directory to path to import knightmare_bot
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bot_loader import best_move, load_bot_class, random_move
 
-# Import the Knightmare bot class directly
-try:
-    import knightmare_bot
-    
-    # Find the bot class
-    bot_class = None
-    for name in dir(knightmare_bot):
-        obj = getattr(knightmare_bot, name)
-        if isinstance(obj, type) and 'Knightmare' in name:
-            bot_class = obj
-            break
-    
-    if not bot_class:
-        print("Warning: Could not find Knightmare class in knightmare_bot.py")
-        bot_class = None
-except Exception as e:
-    print(f"Warning: Could not import knightmare_bot.py: {e}")
-    bot_class = None
+bot_class = load_bot_class()
 
 app = Flask(__name__)
 
@@ -58,6 +40,9 @@ MAX_THINK_TIME = 10.0
 
 # Default port for this interface
 DEFAULT_PORT = 5002
+
+# Seconds the engine may think about each move
+THINK_SECONDS = 2.0
 
 def stockfish_candidates():
     """Paths worth trying for the Stockfish binary, best first"""
@@ -126,47 +111,18 @@ def reset_game():
 def get_knightmare_move(board):
     """Get move from Knightmare bot"""
     global knightmare
-    
-    if not bot_class:
-        # Fallback to random if bot not available
-        moves = list(board.legal_moves)
-        return random.choice(moves) if moves else None
-    
-    try:
-        if not knightmare:
-            knightmare = bot_class()
-        
-        # Try different method names that might exist
-        if hasattr(knightmare, 'get_best_move'):
-            return knightmare.get_best_move(board.copy(), max_time=2.0)
-        elif hasattr(knightmare, 'get_move'):
-            return knightmare.get_move(board.copy(), 2.0)
-        else:
-            # Try minimax directly
-            if hasattr(knightmare, 'minimax'):
-                _, move = knightmare.minimax(
-                    board.copy(), 
-                    4,  # depth
-                    -float('inf'), 
-                    float('inf'), 
-                    board.turn == chess.WHITE
-                )
-                return move
-    except Exception as e:
-        print(f"Error getting Knightmare move: {e}")
-    
-    # Fallback to random
-    moves = list(board.legal_moves)
-    return random.choice(moves) if moves else None
+
+    if bot_class and knightmare is None:
+        knightmare = bot_class()
+
+    return best_move(knightmare, board, THINK_SECONDS)
 
 def get_stockfish_move(board, level=1, think_time=0.1):
     """Get move from Stockfish"""
     global stockfish_engine
     
     if not stockfish_engine:
-        # Fallback to random if Stockfish not available
-        moves = list(board.legal_moves)
-        return random.choice(moves) if moves else None
+        return random_move(board)
     
     try:
         # Configure Stockfish strength (1-20)
@@ -177,8 +133,7 @@ def get_stockfish_move(board, level=1, think_time=0.1):
         return result.move
     except Exception as e:
         print(f"Error getting Stockfish move: {e}")
-        moves = list(board.legal_moves)
-        return random.choice(moves) if moves else None
+        return random_move(board)
 
 HTML = """
 <!DOCTYPE html>
