@@ -44,6 +44,10 @@ MAX_MOVE_TIME = 5.0
 # Assumed moves left in the game when movestogo is not supplied
 CLOCK_DIVISOR = 30
 
+# Roughly how much more work each extra ply costs, used to decide whether
+# the next iteration will fit in the time that is left
+BRANCHING_ESTIMATE = 4.0
+
 # How many extra plies of captures to resolve past the main search horizon
 QUIESCENCE_DEPTH = 4
 
@@ -889,18 +893,28 @@ class KnightmareBot:
         self.killer_moves.clear()  # Clear each search
         
         # Iterative deepening with time control
+        last_iteration = None
+
         try:
             for depth in range(1, max_depth + 1):
                 self.nodes = 0
-                
-                # Time check
-                elapsed = time.time() - start_time
-                if elapsed > time_limit * 0.7:
+                iteration_start = time.time()
+                elapsed = iteration_start - start_time
+
+                # Starting an iteration that cannot finish wastes the rest
+                # of the budget and its result is thrown away, so predict
+                # the cost from how long the previous depth actually took.
+                if last_iteration is not None:
+                    projected = last_iteration * BRANCHING_ESTIMATE
+                    if elapsed + projected > time_limit:
+                        break
+                elif elapsed > time_limit * 0.7:
                     break
-                
+
                 # Search with timeout protection
                 maximizing = board.turn == chess.WHITE
                 score, move = self.minimax(board, depth, -float('inf'), float('inf'), maximizing)
+                last_iteration = time.time() - iteration_start
                 
                 if move and move in legal_moves:
                     best_move = move
