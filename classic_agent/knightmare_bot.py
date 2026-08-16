@@ -792,7 +792,10 @@ class KnightmareBot:
 
         best_move = moves[0]
 
-        cut_off = False
+        # The window as it was on entry. Classifying the result needs the
+        # original bounds, because alpha and beta get narrowed below.
+        alpha_orig = alpha
+        beta_orig = beta
 
         if maximizing:
             max_eval = -float('inf')
@@ -808,11 +811,17 @@ class KnightmareBot:
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
                     self.record_cutoff(board, move, depth, ply)
-                    cut_off = True
                     break
 
-            # An early exit means max_eval is only a lower bound on the truth
-            flag = TT_LOWER if cut_off else TT_EXACT
+            # Classify against the window we were given. Cutting off high
+            # gives a lower bound; scoring at or below the incoming alpha
+            # means every move failed low and the truth may be lower still.
+            if max_eval >= beta_orig:
+                flag = TT_LOWER
+            elif max_eval <= alpha_orig:
+                flag = TT_UPPER
+            else:
+                flag = TT_EXACT
             self.store_tt(tt_key, max_eval, best_move, flag)
             return max_eval, best_move
         else:
@@ -829,11 +838,16 @@ class KnightmareBot:
                 beta = min(beta, eval_score)
                 if beta <= alpha:
                     self.record_cutoff(board, move, depth, ply)
-                    cut_off = True
                     break
 
-            # An early exit means min_eval is only an upper bound on the truth
-            flag = TT_UPPER if cut_off else TT_EXACT
+            # Mirror of the maximizing case: cutting off low gives an upper
+            # bound, and scoring at or above the incoming beta is a fail high
+            if min_eval <= alpha_orig:
+                flag = TT_UPPER
+            elif min_eval >= beta_orig:
+                flag = TT_LOWER
+            else:
+                flag = TT_EXACT
             self.store_tt(tt_key, min_eval, best_move, flag)
             return min_eval, best_move
     
