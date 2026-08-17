@@ -163,6 +163,13 @@ class KnightmareFast:
 
         if board.can_claim_fifty_moves():
             return 0
+
+        # A threefold repetition is a draw the opponent can claim, but
+        # board.is_game_over() ignores it because it needs claiming. Without
+        # this the engine reads a repetition in a won position as still won
+        # and happily shuffles the win away.
+        if board.is_repetition(3):
+            return 0
             
         score = 0
         endgame = self.is_endgame(board)
