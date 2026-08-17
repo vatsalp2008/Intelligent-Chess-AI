@@ -75,11 +75,11 @@ FORBIDDEN = {
 }
 
 
-def check_position(bot, name, fen, wanted, note, depth, verbose):
+def check_position(bot, name, fen, wanted, note, depth, verbose, seconds=NO_TIME_LIMIT):
     """Search one position and report whether the move is acceptable"""
     board = chess.Board(fen)
     start = time.time()
-    move = bot.get_move(board, NO_TIME_LIMIT, depth)
+    move = bot.get_move(board, seconds, depth)
     elapsed = time.time() - start
 
     if move is None:
@@ -103,7 +103,7 @@ def check_position(bot, name, fen, wanted, note, depth, verbose):
     return True, move.uci(), elapsed
 
 
-def run_suite(depth, verbose=False):
+def run_suite(depth, verbose=False, seconds=NO_TIME_LIMIT):
     """Run every position, returning (passed, total)"""
     bot = KnightmareBot()
     passed = 0
@@ -112,7 +112,9 @@ def run_suite(depth, verbose=False):
     print("=" * 68)
 
     for name, fen, wanted, note in POSITIONS:
-        ok, detail, elapsed = check_position(bot, name, fen, wanted, note, depth, verbose)
+        ok, detail, elapsed = check_position(
+            bot, name, fen, wanted, note, depth, verbose, seconds
+        )
         mark = "PASS" if ok else "FAIL"
         print(f"  [{mark}] {name:30} {detail:24} {elapsed:5.2f}s")
         if verbose and not ok:
@@ -129,12 +131,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run the engine over tactical positions")
     parser.add_argument("--depth", type=int, default=3, help="search depth (default: 3)")
     parser.add_argument("--verbose", action="store_true", help="explain failures")
+    parser.add_argument("--seconds", type=float, default=NO_TIME_LIMIT, metavar="S",
+                        help="cap thinking time per position (default: unlimited)")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    passed, total = run_suite(args.depth, args.verbose)
+    passed, total = run_suite(args.depth, args.verbose, args.seconds)
     return 0 if passed == total else 1
 
 
