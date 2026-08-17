@@ -11,6 +11,7 @@ import unittest
 import chess
 
 from knightmare import (
+    MATE_SCORE,
     PIECE_VALUES,
     TT_EXACT,
     TT_MAX_ENTRIES,
@@ -54,6 +55,101 @@ class TestEvaluationSign(unittest.TestCase):
     def test_claimable_fifty_move_draw_is_zero(self):
         board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 100 60")
         self.assertEqual(self.bot.evaluate_board(board), 0)
+
+
+class TestMateScoring(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareFast()
+        # Black is mated; White delivered it
+        self.mated = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1")
+
+    def test_nearer_mate_scores_higher(self):
+        near = self.bot.evaluate_board(self.mated, ply=2)
+        far = self.bot.evaluate_board(self.mated, ply=8)
+        self.assertGreater(near, far)
+
+    def test_mate_score_magnitude(self):
+        self.assertEqual(self.bot.evaluate_board(self.mated, ply=0), MATE_SCORE)
+        self.assertEqual(self.bot.evaluate_board(self.mated, ply=5), MATE_SCORE - 5)
+
+    def test_being_mated_is_a_large_negative(self):
+        white_mated = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4r1K1 w - - 0 1")
+        self.assertTrue(white_mated.is_checkmate())
+        self.assertEqual(self.bot.evaluate_board(white_mated, ply=0), -MATE_SCORE)
+
+    def test_mate_scores_are_not_cached(self):
+        """They are relative to the ply they were found at"""
+        bot = KnightmareFast()
+        bot.store_tt(("key",), MATE_SCORE - 3, None, TT_EXACT)
+        self.assertEqual(bot.transposition_table, {})
+
+    def test_ordinary_scores_are_still_cached(self):
+        bot = KnightmareFast()
+        bot.store_tt(("key",), 120, None, TT_EXACT)
+        self.assertIn(("key",), bot.transposition_table)
+
+
+class TestDrawDetection(unittest.TestCase):
+    def setUp(self):
+        self.bot = KnightmareFast()
+
+    def test_threefold_repetition_is_a_draw(self):
+        """Shuffling in a won position must not still read as winning"""
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+        self.assertGreater(self.bot.evaluate_board(board), 0)
+
+        for uci in ("d1d2", "e8e7", "d2d1", "e7e8") * 2:
+            board.push(chess.Move.from_uci(uci))
+
+        self.assertTrue(board.is_repetition(3))
+        self.assertEqual(self.bot.evaluate_board(board), 0)
+
+    def test_fifty_move_position_is_a_draw(self):
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 100 60")
+        self.assertEqual(self.bot.evaluate_board(board), 0)
+
+    def test_material_lead_still_counts_before_the_clock_runs_out(self):
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+        self.assertGreater(self.bot.evaluate_board(board), 0)
+
+
+class TestOpeningBook(unittest.TestCase):
+    """The book used to be keyed by FEN strings that could never match"""
+
+    def setUp(self):
+        self.bot = KnightmareFast()
+
+    def test_every_entry_matches_a_real_position(self):
+        self.assertEqual(len(self.bot.opening_book), 3)
+
+    def test_start_position_is_in_book(self):
+        board = chess.Board()
+        self.assertIn(board._transposition_key(), self.bot.opening_book)
+
+    def test_position_after_first_move_is_in_book(self):
+        for opening in ("e2e4", "d2d4"):
+            with self.subTest(opening=opening):
+                board = chess.Board()
+                board.push(chess.Move.from_uci(opening))
+                self.assertIn(board._transposition_key(), self.bot.opening_book)
+
+    def test_unrelated_position_is_not_in_book(self):
+        board = chess.Board(
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        )
+        self.assertNotIn(board._transposition_key(), self.bot.opening_book)
+
+    def test_every_stored_move_is_legal_where_it_is_stored(self):
+        board = chess.Board()
+        for move in self.bot.opening_book[board._transposition_key()]:
+            self.assertIn(move, board.legal_moves)
+
+    def test_a_forced_mate_beats_the_book(self):
+        """The mate check runs first, so the book cannot miss a win"""
+        board = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1")
+        self.assertEqual(
+            self.bot.get_best_move(board, 600.0, 3), chess.Move.from_uci("e1e8")
+        )
 
 
 class TestSearchQuality(unittest.TestCase):
