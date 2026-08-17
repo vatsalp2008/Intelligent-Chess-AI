@@ -10,6 +10,9 @@ tactic that needs a deeper search.
     python3 tactics.py
     python3 tactics.py --depth 4
     python3 tactics.py --verbose
+
+Exits non-zero if any position is failed, so CI catches a search change
+that quietly stops solving something it used to.
 """
 
 import argparse
