@@ -37,6 +37,12 @@ DEFAULT_MAX_DEPTH = 4
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
+# Score for a mate delivered at ply 0; deeper mates score slightly lower
+MATE_SCORE = 30000
+
+# Scores within this margin of MATE_SCORE count as mate scores
+MAX_PLY = 100
+
 # Simplified piece-square tables
 def get_piece_square_value(piece_type, square, color, endgame=False):
     """Get positional value for a piece on a square"""
@@ -115,7 +121,13 @@ class KnightmareFast:
         return book
         
     def store_tt(self, key, score, move, flag):
-        """Cache a search result, keeping the table to a sane size"""
+        """Cache a search result, keeping the table to a sane size
+
+        Mate scores are relative to the ply they were found at, so caching
+        them would hand back the wrong distance elsewhere in the tree.
+        """
+        if abs(score) >= MATE_SCORE - MAX_PLY:
+            return
         if len(self.transposition_table) >= TT_MAX_ENTRIES:
             return
         self.transposition_table[key] = (score, move, flag)
@@ -131,20 +143,24 @@ class KnightmareFast:
         # Endgame if no queens or very few pieces
         return queens == 0 or (queens + rooks + minors) <= 6
     
-    def evaluate_board(self, board):
+    def evaluate_board(self, board, ply=0):
         """Simplified but robust evaluation function
 
         Scores are absolute: positive favours White regardless of whose
         turn it is. minimax() maximizes for White and minimizes for Black,
         so a side-relative score here would flip sign every ply and make
         the search compare incompatible numbers.
+
+        Mate scores shrink with ply so a quicker mate outranks a slower one
+        and the losing side puts mate off as long as it can.
         """
         if board.is_checkmate():
-            return -30000 if board.turn else 30000
-        
+            mate_score = MATE_SCORE - ply
+            return -mate_score if board.turn else mate_score
+
         if board.is_stalemate() or board.is_insufficient_material():
             return 0
-        
+
         if board.can_claim_fifty_moves():
             return 0
             
@@ -200,7 +216,7 @@ class KnightmareFast:
         move_scores.sort(key=lambda x: x[1], reverse=True)
         return [move for move, _ in move_scores]
     
-    def quiesce(self, board, alpha, beta, depth=QUIESCENCE_DEPTH):
+    def quiesce(self, board, alpha, beta, ply=0, depth=QUIESCENCE_DEPTH):
         """Keep resolving captures before scoring the position
 
         Stopping in the middle of a trade reads the position as if the
@@ -209,9 +225,9 @@ class KnightmareFast:
         self.nodes += 1
 
         if board.is_game_over():
-            return self.evaluate_board(board)
+            return self.evaluate_board(board, ply)
 
-        stand_pat = self.evaluate_board(board)
+        stand_pat = self.evaluate_board(board, ply)
         if depth == 0:
             return stand_pat
 
@@ -233,7 +249,7 @@ class KnightmareFast:
 
         for move in self.order_moves(board, captures):
             board.push(move)
-            score = self.quiesce(board, alpha, beta, depth - 1)
+            score = self.quiesce(board, alpha, beta, ply + 1, depth - 1)
             board.pop()
 
             if white_to_move:
@@ -247,16 +263,16 @@ class KnightmareFast:
 
         return alpha if white_to_move else beta
 
-    def minimax(self, board, depth, alpha, beta, maximizing):
+    def minimax(self, board, depth, alpha, beta, maximizing, ply=0):
         """Simple minimax with alpha-beta pruning"""
         self.nodes += 1
 
         # Terminal conditions
         if board.is_game_over():
-            return self.evaluate_board(board), None
+            return self.evaluate_board(board, ply), None
 
         if depth == 0:
-            return self.quiesce(board, alpha, beta), None
+            return self.quiesce(board, alpha, beta, ply), None
 
         # Reuse an earlier search of this position when the stored score
         # still decides the current window. Values from a cut-off search
@@ -275,7 +291,7 @@ class KnightmareFast:
         # Get legal moves
         moves = list(board.legal_moves)
         if not moves:
-            return self.evaluate_board(board), None
+            return self.evaluate_board(board, ply), None
 
         # Order moves for better pruning. This has to happen before the
         # shallow-depth cut below, otherwise the cut keeps ten arbitrary
@@ -293,7 +309,7 @@ class KnightmareFast:
             max_eval = -float('inf')
             for move in moves:
                 board.push(move)
-                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False)
+                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False, ply + 1)
                 board.pop()
 
                 if eval_score > max_eval:
@@ -311,7 +327,7 @@ class KnightmareFast:
             min_eval = float('inf')
             for move in moves:
                 board.push(move)
-                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True)
+                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True, ply + 1)
                 board.pop()
 
                 if eval_score < min_eval:
