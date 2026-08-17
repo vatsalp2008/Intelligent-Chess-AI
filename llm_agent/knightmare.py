@@ -31,6 +31,9 @@ TT_MAX_ENTRIES = 200000
 # Extra plies of captures resolved past the main search horizon
 QUIESCENCE_DEPTH = 4
 
+# Deepest iteration started when no depth is requested
+DEFAULT_MAX_DEPTH = 4
+
 # Simplified piece-square tables
 def get_piece_square_value(piece_type, square, color, endgame=False):
     """Get positional value for a piece on a square"""
@@ -303,7 +306,7 @@ class KnightmareFast:
             self.store_tt(tt_key, min_eval, best_move, TT_UPPER if cut_off else TT_EXACT)
             return min_eval, best_move
     
-    def get_best_move(self, board, max_time=2.0):
+    def get_best_move(self, board, max_time=2.0, max_depth=DEFAULT_MAX_DEPTH):
         """Get best move - CRITICAL: This must return a legal move from the given board"""
         start_time = time.time()
         
@@ -353,7 +356,6 @@ class KnightmareFast:
         # Iterative deepening. Scores from different depths are not
         # comparable, so always trust the deepest completed iteration
         # rather than keeping the best-looking score seen so far.
-        max_depth = 4
         for depth in range(1, max_depth + 1):
             self.nodes = 0
 
