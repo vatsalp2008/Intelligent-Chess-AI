@@ -34,6 +34,9 @@ QUIESCENCE_DEPTH = 4
 # Deepest iteration started when no depth is requested
 DEFAULT_MAX_DEPTH = 4
 
+# Stop consulting the opening book after this many full moves
+BOOK_MAX_FULLMOVES = 5
+
 # Simplified piece-square tables
 def get_piece_square_value(piece_type, square, color, endgame=False):
     """Get positional value for a piece on a square"""
@@ -78,21 +81,38 @@ class KnightmareFast:
         self.opening_book = self.create_simple_opening_book()
         
     def create_simple_opening_book(self):
-        """Create a simple, reliable opening book"""
-        return {
-            # Starting position - only include moves we know are legal
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": [
-                "e2e4", "d2d4", "g1f3"
-            ],
+        """Build the opening book, keyed by position
+
+        The lines are written as move sequences and replayed once to key
+        them by position. Keying on a FEN string does not work: python-chess
+        omits the en passant square when no en passant capture is actually
+        possible, so a hand written FEN with "e3" in it never matches the
+        position it describes. Keying on the position also makes
+        transpositions work and covers boards built from a FEN, which have
+        no move history at all.
+        """
+        lines = {
+            # First move as White
+            (): ["e2e4", "d2d4", "g1f3"],
             # After 1.e4
-            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1": [
-                "e7e5", "c7c5", "e7e6"
-            ],
+            ("e2e4",): ["e7e5", "c7c5", "e7e6"],
             # After 1.d4
-            "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1": [
-                "d7d5", "g8f6"
-            ],
+            ("d2d4",): ["d7d5", "g8f6"],
         }
+
+        book = {}
+        for moves, replies in lines.items():
+            board = chess.Board()
+            for uci in moves:
+                board.push(chess.Move.from_uci(uci))
+            legal = [
+                chess.Move.from_uci(uci)
+                for uci in replies
+                if chess.Move.from_uci(uci) in board.legal_moves
+            ]
+            if legal:
+                book[board._transposition_key()] = legal
+        return book
         
     def store_tt(self, key, score, move, flag):
         """Cache a search result, keeping the table to a sane size"""
@@ -320,25 +340,8 @@ class KnightmareFast:
         if len(legal_moves) == 1:
             return legal_moves[0]
         
-        # Try opening book ONLY if the position matches exactly
-        fen = board.fen()
-        if fen in self.opening_book and board.fullmove_number <= 5:
-            book_moves = []
-            for move_uci in self.opening_book[fen]:
-                try:
-                    move = chess.Move.from_uci(move_uci)
-                    # CRITICAL: Verify the book move is legal in current position
-                    if move in legal_moves:
-                        book_moves.append(move)
-                except:
-                    pass
-            
-            if book_moves:
-                chosen = random.choice(book_moves)
-                print(f"info string Using opening book move {chosen}")
-                return chosen
-        
-        # Check for immediate checkmate
+        # Check for immediate checkmate. This runs before the book so a
+        # book reply can never talk the engine out of a forced win.
         for move in legal_moves:
             board.push(move)
             if board.is_checkmate():
@@ -346,6 +349,16 @@ class KnightmareFast:
                 print(f"info string Found checkmate {move}")
                 return move
             board.pop()
+
+        # Known theory for the opening, looked up by position
+        if board.fullmove_number <= BOOK_MAX_FULLMOVES:
+            replies = self.opening_book.get(board._transposition_key())
+            if replies:
+                book_moves = [move for move in replies if move in legal_moves]
+                if book_moves:
+                    chosen = random.choice(book_moves)
+                    print(f"info string Using opening book move {chosen}")
+                    return chosen
         
         # Use minimax to find best move
         # CRITICAL: Create a fresh copy for search
