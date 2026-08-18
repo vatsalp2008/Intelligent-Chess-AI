@@ -6,12 +6,14 @@ Run with:
     python3 -m unittest test_knightmare
 """
 
+import time
 import unittest
 
 import chess
 
 from knightmare import (
     MATE_SCORE,
+    format_score,
     PIECE_VALUES,
     TT_EXACT,
     TT_MAX_ENTRIES,
@@ -329,6 +331,61 @@ class TestPieceSquareValues(unittest.TestCase):
         self.assertLess(PIECE_VALUES[chess.KNIGHT], PIECE_VALUES[chess.ROOK])
         self.assertLess(PIECE_VALUES[chess.ROOK], PIECE_VALUES[chess.QUEEN])
         self.assertLess(PIECE_VALUES[chess.QUEEN], PIECE_VALUES[chess.KING])
+
+
+class TestTimeBudget(unittest.TestCase):
+    """Overrunning the clock loses games, so the budget must be respected"""
+
+    BUSY_FEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+
+    # Starting an iteration can overshoot, so allow some slack
+    TOLERANCE = 2.5
+
+    def budget_check(self, budget):
+        board = chess.Board(self.BUSY_FEN)
+        bot = KnightmareFast()
+
+        start = time.time()
+        move = bot.get_best_move(board, budget, 6)
+        elapsed = time.time() - start
+
+        self.assertIn(move, board.legal_moves)
+        self.assertLess(elapsed, budget * self.TOLERANCE,
+                        f"took {elapsed:.2f}s for a {budget}s budget")
+
+    def test_short_budget_is_respected(self):
+        self.budget_check(0.2)
+
+    def test_medium_budget_is_respected(self):
+        self.budget_check(1.0)
+
+    def test_a_move_comes_back_on_a_tiny_budget(self):
+        board = chess.Board(self.BUSY_FEN)
+        self.assertIn(KnightmareFast().get_best_move(board, 0.01, 6), board.legal_moves)
+
+    def test_depth_limit_is_honoured(self):
+        board = chess.Board(self.BUSY_FEN)
+        shallow = KnightmareFast()
+        deep = KnightmareFast()
+        shallow.get_best_move(board.copy(), 600.0, 2)
+        deep.get_best_move(board.copy(), 600.0, 4)
+        self.assertLess(shallow.nodes, deep.nodes)
+
+
+class TestScoreFormatting(unittest.TestCase):
+    def test_centipawn_scores(self):
+        self.assertEqual(format_score(0), "cp 0")
+        self.assertEqual(format_score(-240), "cp -240")
+
+    def test_mate_scores_are_reported_in_moves(self):
+        self.assertEqual(format_score(MATE_SCORE), "mate 1")
+        self.assertEqual(format_score(MATE_SCORE - 3), "mate 2")
+
+    def test_getting_mated_is_negative(self):
+        self.assertTrue(format_score(-(MATE_SCORE - 3)).startswith("mate -"))
+
+    def test_ordinary_scores_are_not_mistaken_for_mates(self):
+        self.assertTrue(format_score(900).startswith("cp"))
 
 
 class TestEndgameDetection(unittest.TestCase):
