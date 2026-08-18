@@ -7,6 +7,13 @@ minutes per value, which is too slow to explore more than a couple of
 settings. This scores a candidate far more cheaply: for a fixed set of
 positions, count how often the engine picks the move Stockfish prefers.
 
+Candidates are scored by how much Stockfish thinks our chosen move gives
+away, summed over the positions. Counting exact move matches was tried
+first and turned out to have too little resolution: every weight in a
+plausible range scored identically, because a change of 10 or 20
+centipawns rarely flips which move a depth-3 search prefers. Centipawn
+loss still moves when the choice does not.
+
 That is a proxy, not the real objective, so treat a win here as a
 candidate worth confirming with selfplay.py rather than as proof. It is
 useful precisely because it is fast enough to sweep a range of values.
@@ -80,20 +87,45 @@ def find_stockfish():
     return None
 
 
-def reference_moves(engine, positions):
-    """Stockfish's preferred move for each position, computed once"""
+def score_for(engine, board, move, cache):
+    """Stockfish's score for a position after move, from the mover's view
+
+    Cached, because the same move gets proposed by many weight settings and
+    each analysis is the expensive part.
+    """
+    key = (board.board_fen(), board.turn, move.uci())
+    if key in cache:
+        return cache[key]
+
+    mover = board.turn
+    board.push(move)
+    try:
+        info = engine.analyse(board, chess.engine.Limit(depth=REFERENCE_DEPTH))
+        score = info["score"].pov(mover).score(mate_score=100000)
+    finally:
+        board.pop()
+
+    cache[key] = score
+    return score
+
+
+def reference_scores(engine, positions, cache):
+    """The best score available in each position, per Stockfish"""
     best = {}
     for fen in positions:
         board = chess.Board(fen)
         info = engine.analyse(board, chess.engine.Limit(depth=REFERENCE_DEPTH))
         pv = info.get("pv")
-        best[fen] = pv[0] if pv else None
+        if not pv:
+            best[fen] = None
+            continue
+        best[fen] = score_for(engine, board, pv[0], cache)
     return best
 
 
-def agreement(positions, best):
-    """How many positions our engine answers the same way Stockfish does"""
-    matched = 0
+def centipawn_loss(engine, positions, best, cache):
+    """Total centipawns given away across the positions, lower is better"""
+    loss = 0
     for fen in positions:
         if best[fen] is None:
             continue
@@ -101,37 +133,41 @@ def agreement(positions, best):
         # A fresh engine each time so no table carries over between settings
         bot = knightmare_bot.KnightmareBot()
         move = bot.get_move(board, NO_TIME_LIMIT, OUR_DEPTH)
-        matched += (move == best[fen])
-    return matched
+        if move is None or move not in board.legal_moves:
+            loss += 1000  # failing to move is worse than any bad move
+            continue
+        loss += max(0, best[fen] - score_for(engine, board, move, cache))
+    return loss
 
 
-def sweep_weight(name, values, positions, best, verbose=True):
-    """Try each value for one weight, returning {value: agreement}"""
+def sweep_weight(engine, name, values, positions, best, cache, verbose=True):
+    """Try each value for one weight, returning {value: centipawn_loss}"""
     original = getattr(knightmare_bot, name)
-    scores = {}
+    losses = {}
 
     try:
         for value in values:
             setattr(knightmare_bot, name, value)
-            score = agreement(positions, best)
-            scores[value] = score
+            loss = centipawn_loss(engine, positions, best, cache)
+            losses[value] = loss
             if verbose:
                 marker = "  (current)" if value == original else ""
-                print(f"    {name} = {value:4}  agrees on {score}/{len(positions)}{marker}",
+                print(f"    {name} = {value:4}  gives away {loss:5} cp{marker}",
                       flush=True)
     finally:
         # Always put the module back the way it was
         setattr(knightmare_bot, name, original)
 
-    return scores
+    return losses
 
 
-def report(name, scores, original):
+def report(name, losses, original):
     """Say whether any value beat the one in the source"""
-    best_value = max(scores, key=lambda v: (scores[v], v == original))
-    if scores[best_value] > scores[original]:
-        print(f"  {name}: {best_value} scores {scores[best_value]} vs "
-              f"{scores[original]} for the current {original} - worth confirming")
+    # Ties go to the value already in the source
+    best_value = min(losses, key=lambda v: (losses[v], v != original))
+    if losses[best_value] < losses[original]:
+        print(f"  {name}: {best_value} gives away {losses[best_value]} cp vs "
+              f"{losses[original]} for the current {original} - worth confirming")
         return True
     print(f"  {name}: current value {original} is as good as anything tried")
     return False
@@ -175,25 +211,26 @@ def main():
         print("Pass --weight NAME, --all, or --list")
         return 1
 
+    cache = {}
     engine = chess.engine.SimpleEngine.popen_uci(path)
     try:
         print(f"Reference: Stockfish depth {REFERENCE_DEPTH} over "
               f"{len(positions)} positions")
-        best = reference_moves(engine, positions)
+        best = reference_scores(engine, positions, cache)
+
+        print("=" * 64)
+        improved = []
+        for name, values in targets.items():
+            original = getattr(knightmare_bot, name)
+            if original not in values:
+                values = sorted(set(values) | {original})
+            print(f"  sweeping {name} (current {original})")
+            losses = sweep_weight(engine, name, values, positions, best, cache)
+            if report(name, losses, original):
+                improved.append(name)
+            print("-" * 64)
     finally:
         engine.quit()
-
-    print("=" * 64)
-    improved = []
-    for name, values in targets.items():
-        original = getattr(knightmare_bot, name)
-        if original not in values:
-            values = sorted(set(values) | {original})
-        print(f"  sweeping {name} (current {original})")
-        scores = sweep_weight(name, values, positions, best)
-        if report(name, scores, original):
-            improved.append(name)
-        print("-" * 64)
 
     print("=" * 64)
     if improved:
