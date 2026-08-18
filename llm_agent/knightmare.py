@@ -50,6 +50,11 @@ MAX_PLY = 100
 # Piece-square tables, written from White's point of view with rank 8 on the
 # first row so they read like a board. Values are centipawn adjustments on
 # top of the piece value. Black looks them up through a mirrored square.
+#
+# These tables are duplicated in classic_agent/knightmare_bot.py. The two engines
+# are separate top level scripts with no shared package between them, so
+# there is nowhere to import from; if you tune a table here, tune it there
+# too or the two engines will quietly disagree.
 PAWN_TABLE = [
      0,   0,   0,   0,   0,   0,   0,   0,
     50,  50,  50,  50,  50,  50,  50,  50,
