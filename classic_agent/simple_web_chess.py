@@ -6,6 +6,8 @@ Works directly with the Knightmare bot code without UCI
 
 from flask import Flask, render_template_string, jsonify
 import argparse
+import threading
+
 import chess
 import chess.svg
 import random
@@ -23,10 +25,11 @@ bot_class = load_bot_class()
 
 app = Flask(__name__)
 
-# Global game state
+# Global game state, guarded by board_lock because the dev server is threaded
 game_board = chess.Board()
 move_history = []
 knightmare = None
+board_lock = threading.Lock()
 
 def reset_game():
     global game_board, move_history, knightmare
@@ -284,46 +287,55 @@ def get_board():
 
 @app.route('/new_game', methods=['POST'])
 def new_game():
-    reset_game()
+    with board_lock:
+        reset_game()
     return jsonify({'success': True})
 
 @app.route('/move', methods=['POST'])
 def make_move():
+    """Play one move for whoever is to move
+
+    Held under board_lock: the dev server is threaded, so overlapping
+    requests would each read the same position and all push a move for the
+    same side. Auto play makes that routine rather than rare, because a
+    move can take longer than the interval the browser fires on.
+    """
     global game_board, move_history
-    
-    if game_board.is_game_over():
-        return jsonify({'error': 'Game is over'})
-    
-    try:
-        # Determine whose turn it is
-        if game_board.turn == chess.WHITE:
-            # Random bot plays White
-            move = get_random_move(game_board)
-            player = "Random"
-        else:
-            # Knightmare plays Black
-            move = get_knightmare_move(game_board)
-            player = "Knightmare"
-        
-        if move and move in game_board.legal_moves:
-            san = game_board.san(move)
-            game_board.push(move)
-            move_history.append(f"{player}: {san}")
-            return jsonify({'success': True})
-        else:
+
+    with board_lock:
+        if game_board.is_game_over():
+            return jsonify({'error': 'Game is over'})
+
+        try:
+            # Determine whose turn it is
+            if game_board.turn == chess.WHITE:
+                # Random bot plays White
+                move = get_random_move(game_board)
+                player = "Random"
+            else:
+                # Knightmare plays Black
+                move = get_knightmare_move(game_board)
+                player = "Knightmare"
+
+            if move and move in game_board.legal_moves:
+                san = game_board.san(move)
+                game_board.push(move)
+                move_history.append(f"{player}: {san}")
+                return jsonify({'success': True})
+
             return jsonify({'error': f'{player} failed to make valid move'})
-            
-    except Exception as e:
-        print(f"Error in make_move: {e}")
-        # Fallback to random move
-        moves = list(game_board.legal_moves)
-        if moves:
-            move = random.choice(moves)
-            san = game_board.san(move)
-            game_board.push(move)
-            move_history.append(f"Emergency: {san}")
-            return jsonify({'success': True})
-        return jsonify({'error': str(e)})
+
+        except Exception as e:
+            print(f"Error in make_move: {e}")
+            # Fallback to random move
+            moves = list(game_board.legal_moves)
+            if moves:
+                move = random.choice(moves)
+                san = game_board.san(move)
+                game_board.push(move)
+                move_history.append(f"Emergency: {san}")
+                return jsonify({'success': True})
+            return jsonify({'error': str(e)})
 
 def parse_args():
     """Parse command line options"""
