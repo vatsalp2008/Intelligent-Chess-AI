@@ -10,6 +10,11 @@
 
 chess==1.11.2
 
+# The web interface tests drive Flask through its test client, so add it if
+# you want run_tests.sh to cover them rather than skip them:
+#
+#     pip install flask
+
 # benchmark_stockfish.py additionally needs a Stockfish binary on PATH,
 # which is not a Python package:
 #
