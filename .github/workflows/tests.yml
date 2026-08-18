@@ -51,6 +51,10 @@ jobs:
         working-directory: classic_agent
         run: python -m unittest discover -p "test_tournament.py" -v
 
+      - name: Run tuner tests
+        working-directory: classic_agent
+        run: python -m unittest discover -p "test_tune_eval.py" -v
+
       - name: Run tactical regression suite
         # Exits non-zero if the engine stops solving a position it used to
         working-directory: classic_agent
