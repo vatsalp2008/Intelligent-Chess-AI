@@ -21,13 +21,14 @@ bot_class = load_bot_class()
 
 app = Flask(__name__)
 
-# Global game state
+# Global game state, guarded by board_lock because the dev server is threaded
 game_board = chess.Board()
 move_history = []
 knightmare = None
 stockfish_engine = None
 stockfish_level = 1  # 1-20 (1 is easiest)
 stockfish_time = 0.1  # Time in seconds for Stockfish to think
+board_lock = threading.Lock()
 
 # Range Stockfish accepts for its Skill Level option
 MIN_SKILL_LEVEL = 0
@@ -119,14 +120,14 @@ def get_knightmare_move(board):
 def get_stockfish_move(board, level=1, think_time=0.1):
     """Get move from Stockfish"""
     global stockfish_engine
-    
+
     if not stockfish_engine:
         return random_move(board)
-    
+
     try:
         # Configure Stockfish strength (1-20)
         stockfish_engine.configure({"Skill Level": level})
-        
+
         # Get move with time limit
         result = stockfish_engine.play(board, chess.engine.Limit(time=think_time))
         return result.move
@@ -311,19 +312,19 @@ HTML = """
         <h1>♔ Knightmare vs Stockfish ♚</h1>
         <p>Test your bot against the world champion chess engine!</p>
     </div>
-    
+
     <div class="container">
         <div class="board-container">
             <div id="board">Loading...</div>
         </div>
-        
+
         <div class="controls">
             <h2>Battle Control Center</h2>
-            
+
             <div class="stockfish-status" id="stockfish-status">
                 Checking Stockfish connection...
             </div>
-            
+
             <div class="settings">
                 <h3>⚙️ Stockfish Settings</h3>
                 <div class="setting-row">
@@ -348,51 +349,51 @@ HTML = """
                     </select>
                 </div>
             </div>
-            
+
             <div class="player-card" id="white-player-card">
                 <div class="player-name" id="white-name">⚪ Stockfish</div>
                 <div class="player-color">Playing White</div>
             </div>
-            
+
             <div class="player-card" id="black-player-card">
                 <div class="player-name" id="black-name">⚫ Knightmare</div>
                 <div class="player-color">Playing Black</div>
             </div>
-            
+
             <div id="status">Ready</div>
-            
+
             <button onclick="newGame()">🆕 New Game</button>
             <button onclick="makeMove()">▶️ Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">🔄 Auto Play: OFF</button>
-            
+
             <h3>📋 Move History</h3>
             <div id="moves"></div>
         </div>
     </div>
-    
+
     <script>
         let autoPlay = null;
         let stockfishLevel = 1;
         let stockfishTime = 0.1;
         let whiteIsKnightmare = false;
-        
+
         function updateBoard() {
             fetch('/board')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('board').innerHTML = data.svg;
-                    
+
                     // Update status with styling
                     const statusEl = document.getElementById('status');
                     statusEl.textContent = data.status;
                     statusEl.className = '';
-                    
+
                     if (data.status.includes('Checkmate')) {
                         statusEl.className = 'checkmate';
                     } else if (data.status.includes('CHECK')) {
                         statusEl.className = 'check';
                     }
-                    
+
                     // Update move history
                     let movesHtml = '';
                     for (let i = 0; i < data.moves.length; i += 2) {
@@ -403,7 +404,7 @@ HTML = """
                     }
                     document.getElementById('moves').innerHTML = movesHtml;
                     document.getElementById('moves').scrollTop = document.getElementById('moves').scrollHeight;
-                    
+
                     // Update player indicators
                     if (data.white_to_move) {
                         document.getElementById('white-player-card').className = 'player-card active';
@@ -412,7 +413,7 @@ HTML = """
                         document.getElementById('white-player-card').className = 'player-card inactive';
                         document.getElementById('black-player-card').className = 'player-card active';
                     }
-                    
+
                     // Update Stockfish status
                     if (data.stockfish_available) {
                         document.getElementById('stockfish-status').className = 'stockfish-status connected';
@@ -421,7 +422,7 @@ HTML = """
                         document.getElementById('stockfish-status').className = 'stockfish-status disconnected';
                         document.getElementById('stockfish-status').textContent = '❌ Stockfish Not Found (using random moves)';
                     }
-                    
+
                     // Stop auto play if game over
                     if (data.game_over && autoPlay) {
                         stopAuto();
@@ -434,31 +435,31 @@ HTML = """
                     }
                 });
         }
-        
+
         function updateLevel() {
             stockfishLevel = document.getElementById('level-slider').value;
             document.getElementById('level-display').textContent = stockfishLevel;
-            
+
             fetch('/set_stockfish_level', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({level: parseInt(stockfishLevel)})
             });
         }
-        
+
         function updateThinkTime() {
             stockfishTime = parseFloat(document.getElementById('think-time').value);
-            
+
             fetch('/set_stockfish_time', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({time: stockfishTime})
             });
         }
-        
+
         function updateColors() {
             whiteIsKnightmare = document.getElementById('white-player').value === 'knightmare';
-            
+
             if (whiteIsKnightmare) {
                 document.getElementById('white-name').textContent = '⚪ Knightmare';
                 document.getElementById('black-name').textContent = '⚫ Stockfish';
@@ -466,24 +467,24 @@ HTML = """
                 document.getElementById('white-name').textContent = '⚪ Stockfish';
                 document.getElementById('black-name').textContent = '⚫ Knightmare';
             }
-            
+
             // Tell server about the change
             fetch('/set_colors', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({white_is_knightmare: whiteIsKnightmare})
             });
-            
+
             // Start new game with new colors
             newGame();
         }
-        
+
         function newGame() {
             stopAuto();
             fetch('/new_game', {method: 'POST'})
                 .then(() => updateBoard());
         }
-        
+
         function makeMove() {
             fetch('/move', {method: 'POST'})
                 .then(response => response.json())
@@ -494,7 +495,7 @@ HTML = """
                     updateBoard();
                 });
         }
-        
+
         function toggleAuto() {
             if (autoPlay) {
                 stopAuto();
@@ -505,7 +506,7 @@ HTML = """
                 makeMove();  // Make first move immediately
             }
         }
-        
+
         function stopAuto() {
             if (autoPlay) {
                 clearInterval(autoPlay);
@@ -514,7 +515,7 @@ HTML = """
                 document.getElementById('auto-btn').className = '';
             }
         }
-        
+
         // Load board on startup
         updateBoard();
     </script>
@@ -529,9 +530,9 @@ def index():
 @app.route('/board')
 def get_board():
     global game_board, move_history, stockfish_engine
-    
+
     svg = chess.svg.board(game_board, size=500)
-    
+
     # Determine game status
     if game_board.is_checkmate():
         winner = "White" if game_board.turn == chess.BLACK else "Black"
@@ -556,7 +557,7 @@ def get_board():
         status = f"{turn} to move"
         if game_board.is_check():
             status += " - CHECK!"
-    
+
     return jsonify({
         'svg': svg,
         'status': status,
@@ -568,7 +569,8 @@ def get_board():
 
 @app.route('/new_game', methods=['POST'])
 def new_game():
-    reset_game()
+    with board_lock:
+        reset_game()
     return jsonify({'success': True})
 
 @app.route('/set_stockfish_level', methods=['POST'])
@@ -623,53 +625,62 @@ def set_colors():
 
 @app.route('/move', methods=['POST'])
 def make_move():
+    """Play one move for whoever is to move
+
+    Held under board_lock: the dev server is threaded, so overlapping
+    requests would each read the same position and all push a move for
+    the same side. Auto play makes that routine here, because the
+    browser fires every 1500ms while a move can take 2000ms.
+    """
     global game_board, move_history, stockfish_level, stockfish_time
-    
-    if game_board.is_game_over():
-        return jsonify({'error': 'Game is over'})
-    
-    try:
-        white_is_knightmare = app.config.get('white_is_knightmare', False)
-        
-        # Determine whose turn it is and which engine to use
-        if game_board.turn == chess.WHITE:
-            if white_is_knightmare:
-                # Knightmare plays White
-                move = get_knightmare_move(game_board)
-                player = "Knightmare"
+
+    with board_lock:
+        if game_board.is_game_over():
+            return jsonify({'error': 'Game is over'})
+
+        try:
+            white_is_knightmare = app.config.get('white_is_knightmare', False)
+
+            # Determine whose turn it is and which engine to use
+            if game_board.turn == chess.WHITE:
+                if white_is_knightmare:
+                    # Knightmare plays White
+                    move = get_knightmare_move(game_board)
+                    player = "Knightmare"
+                else:
+                    # Stockfish plays White
+                    move = get_stockfish_move(game_board, stockfish_level, stockfish_time)
+                    player = f"Stockfish(L{stockfish_level})"
             else:
-                # Stockfish plays White
-                move = get_stockfish_move(game_board, stockfish_level, stockfish_time)
-                player = f"Stockfish(L{stockfish_level})"
-        else:
-            if white_is_knightmare:
-                # Stockfish plays Black
-                move = get_stockfish_move(game_board, stockfish_level, stockfish_time)
-                player = f"Stockfish(L{stockfish_level})"
+                if white_is_knightmare:
+                    # Stockfish plays Black
+                    move = get_stockfish_move(game_board, stockfish_level, stockfish_time)
+                    player = f"Stockfish(L{stockfish_level})"
+                else:
+                    # Knightmare plays Black
+                    move = get_knightmare_move(game_board)
+                    player = "Knightmare"
+
+            if move and move in game_board.legal_moves:
+                san = game_board.san(move)
+                game_board.push(move)
+                move_history.append(f"{san}")  # Just the move notation
+                return jsonify({'success': True})
             else:
-                # Knightmare plays Black
-                move = get_knightmare_move(game_board)
-                player = "Knightmare"
-        
-        if move and move in game_board.legal_moves:
-            san = game_board.san(move)
-            game_board.push(move)
-            move_history.append(f"{san}")  # Just the move notation
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': f'{player} failed to make valid move'})
-            
-    except Exception as e:
-        print(f"Error in make_move: {e}")
-        # Fallback to random move
-        moves = list(game_board.legal_moves)
-        if moves:
-            move = random.choice(moves)
-            san = game_board.san(move)
-            game_board.push(move)
-            move_history.append(f"{san}")
-            return jsonify({'success': True})
-        return jsonify({'error': str(e)})
+                return jsonify({'error': f'{player} failed to make valid move'})
+
+        except Exception as e:
+            print(f"Error in make_move: {e}")
+            # Fallback to random move
+            moves = list(game_board.legal_moves)
+            if moves:
+                move = random.choice(moves)
+                san = game_board.san(move)
+                game_board.push(move)
+                move_history.append(f"{san}")
+                return jsonify({'success': True})
+            return jsonify({'error': str(e)})
+
 
 def stop_process_soon(delay=0.5):
     """Exit once the current response has had time to reach the browser"""
@@ -732,10 +743,10 @@ if __name__ == '__main__':
         print("   Mac: brew install stockfish")
         print("   Linux: sudo apt-get install stockfish")
         print("   Windows: Download from stockfishchess.org")
-    
+
     # Set default colors
     app.config['white_is_knightmare'] = False
-    
+
     print("\n" + "="*60)
     print(f"Open your browser to: http://{args.host}:{args.port}")
     print("="*60)
