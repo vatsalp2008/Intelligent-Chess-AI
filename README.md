@@ -243,6 +243,21 @@ Those tables are duplicated in both engines rather than shared, because
 the two are standalone scripts with no package between them to import
 from. `test_shared_tables.py` fails if the copies drift apart.
 
+Sharing the tables does not mean sharing the tuning. Several search
+features that clearly helped the classic agent measured as neutral or
+worse when ported to this engine, and were not kept:
+
+| Ported feature | classic_agent | baseline engine |
+| :--- | :--- | :--- |
+| Piece-square tables | 75% | 56% (kept) |
+| Searching every move at shallow depth | 65% | 62% (kept) |
+| Stored-move ordering | 26% fewer nodes | 2% fewer, one position worse |
+| Static exchange evaluation | 32-38% fewer nodes | 19% *slower* overall |
+| Check extensions | 67% | 25% (clear regression) |
+
+The two engines differ enough in evaluation and move ordering that a
+feature has to be measured on each one separately.
+
 ---
 
 ## 🏆 Performance Comparison
