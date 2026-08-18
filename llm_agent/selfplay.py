@@ -52,8 +52,17 @@ NO_TIME_LIMIT = 600.0
 
 
 def ask_move(bot, board, depth):
-    """One move from the engine at the fixed depth"""
-    return bot.get_best_move(board, NO_TIME_LIMIT, depth)
+    """One move from the engine, at the fixed depth where supported
+
+    Engines saved before get_best_move grew a depth argument only take a
+    time budget. Comparing against those older copies is the whole point
+    of this script, so fall back rather than failing.
+    """
+    try:
+        return bot.get_best_move(board, NO_TIME_LIMIT, depth)
+    except TypeError:
+        # Older interface: depth is fixed internally, so bound it by time
+        return bot.get_best_move(board, NO_TIME_LIMIT)
 
 
 def play_game(white_bot, black_bot, opening, depth):
