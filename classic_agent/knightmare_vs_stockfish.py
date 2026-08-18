@@ -15,7 +15,7 @@ import threading
 import time
 import os
 
-from bot_loader import best_move, load_bot_class, random_move
+from bot_loader import ask_engine, load_bot_class, random_move
 
 bot_class = load_bot_class()
 
@@ -29,6 +29,9 @@ stockfish_engine = None
 stockfish_level = 1  # 1-20 (1 is easiest)
 stockfish_time = 0.1  # Time in seconds for Stockfish to think
 board_lock = threading.Lock()
+
+# What Knightmare last reported about its search, shown in the interface
+last_engine_info = None
 
 # Range Stockfish accepts for its Skill Level option
 MIN_SKILL_LEVEL = 0
@@ -102,20 +105,23 @@ def find_stockfish():
     return False
 
 def reset_game():
-    global game_board, move_history, knightmare
+    global game_board, move_history, knightmare, last_engine_info
     game_board = chess.Board()
     move_history = []
+    last_engine_info = None
     if bot_class:
         knightmare = bot_class()
 
 def get_knightmare_move(board):
-    """Get move from Knightmare bot"""
-    global knightmare
+    """Get move from Knightmare bot, remembering what it reported"""
+    global knightmare, last_engine_info
 
     if bot_class and knightmare is None:
         knightmare = bot_class()
 
-    return best_move(knightmare, board, THINK_SECONDS)
+    move, info = ask_engine(knightmare, board, THINK_SECONDS)
+    last_engine_info = info
+    return move
 
 def get_stockfish_move(board, level=1, think_time=0.1):
     """Get move from Stockfish"""
@@ -247,6 +253,15 @@ HTML = """
             color: #155724;
             border: 2px solid #28a745;
         }
+        #engine {
+            padding: 8px;
+            background: #eef2ff;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #333;
+        }
         #moves {
             max-height: 300px;
             overflow-y: auto;
@@ -361,6 +376,7 @@ HTML = """
             </div>
 
             <div id="status">Ready</div>
+            <div id="engine">Knightmare: waiting</div>
 
             <button onclick="newGame()">🆕 New Game</button>
             <button onclick="makeMove()">▶️ Make Move</button>
@@ -562,7 +578,7 @@ def get_board():
     Read under board_lock so a request that lands mid update sees
     a whole position rather than one being changed underneath it.
     """
-    global game_board, move_history, stockfish_engine
+    global game_board, move_history, stockfish_engine, last_engine_info
 
     with board_lock:
 
@@ -599,7 +615,8 @@ def get_board():
             'moves': move_history,
             'game_over': game_board.is_game_over(),
             'white_to_move': game_board.turn == chess.WHITE,
-            'stockfish_available': stockfish_engine is not None
+            'stockfish_available': stockfish_engine is not None,
+            'engine': last_engine_info,
         })
 
 @app.route('/new_game', methods=['POST'])
