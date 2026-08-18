@@ -24,66 +24,14 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # The engines and their tests only need python-chess; the pinned
-        # requirements file also drags in Flask, matplotlib and PyInstaller.
-        run: python -m pip install --upgrade pip chess
+        # The engines and their tests only need python-chess. Flask is added
+        # so the web interface tests run too; the pinned requirements file
+        # would also drag in matplotlib and PyInstaller, which nothing here
+        # needs. chester and Ollama are deliberately absent: the modules that
+        # use them import them optionally so their logic stays testable.
+        run: python -m pip install --upgrade pip chess flask
 
-      - name: Run classic agent tests
-        working-directory: classic_agent
-        run: python -m unittest discover -p "test_evaluation.py" -v
-
-      - name: Run search safety tests
-        working-directory: classic_agent
-        run: python -m unittest discover -p "test_search_safety.py" -v
-
-      - name: Run engine loader tests
-        working-directory: classic_agent
-        run: python -m unittest discover -p "test_bot_loader.py" -v
-
-      - name: Run web interface concurrency tests
-        # Needs Flask, which the minimal install above does not include
-        working-directory: classic_agent
-        run: |
-          python -m pip install --quiet flask
-          python -m unittest discover -p "test_web_concurrency.py" -v
-
-      - name: Run tournament runner tests
-        working-directory: classic_agent
-        run: python -m unittest discover -p "test_tournament.py" -v
-
-      - name: Run tuner tests
-        working-directory: classic_agent
-        run: python -m unittest discover -p "test_tune_eval.py" -v
-
-      - name: Run tactical regression suite
-        # Exits non-zero if the engine stops solving a position it used to
-        working-directory: classic_agent
-        run: python tactics.py
-
-      - name: Run LLM agent search tests
-        working-directory: llm_agent
-        run: python -m unittest discover -p "test_knightmare.py" -v
-
-      - name: Run baseline engine tactics
-        working-directory: llm_agent
-        run: python tactics.py
-
-      - name: Check the duplicated evaluation tables still match
-        working-directory: llm_agent
-        run: python -m unittest discover -p "test_shared_tables.py" -v
-
-      - name: Run LLM tournament scoring tests
-        # chester is not installed here, which the optional import allows
-        working-directory: llm_agent
-        run: python -m unittest discover -p "test_tournament_scoring.py" -v
-
-      - name: Run LLM prompt parsing tests
-        # These import the bots without Ollama installed, which is what the
-        # optional import in those modules exists to allow.
-        working-directory: llm_agent
-        run: python -m unittest discover -p "test_llm_parsing.py" -v
-
-      - name: Check every tracked module compiles
-        run: |
-          git ls-files '*.py' | xargs python -m py_compile
-          echo "all tracked modules compile"
+      - name: Run every test suite
+        # run_tests.sh is what a developer runs locally, so CI runs the same
+        # thing rather than keeping a second list of suites in step with it.
+        run: ./run_tests.sh
