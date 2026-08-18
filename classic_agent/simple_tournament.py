@@ -128,16 +128,28 @@ class ChessEngine:
                     return None
 
     def quit(self):
-        """Quit the engine"""
-        if self.process:
+        """Shut the engine down, tolerating one that has already died
+
+        Cleanup usually runs from a finally block, often because something
+        already went wrong. Raising here would replace that error and skip
+        whatever cleanup came after, so an unreachable engine is not a
+        failure: it is the state we were trying to reach anyway.
+        """
+        if not self.process:
+            return
+
+        try:
             self.send("quit")
             time.sleep(0.2)
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                # Ignored the terminate, so stop it the hard way
-                self.process.kill()
+        except EngineDied:
+            pass  # already gone, nothing to ask politely
+
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            # Ignored the terminate, so stop it the hard way
+            self.process.kill()
 
 def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
     """Play a single game between two engines
@@ -289,9 +301,13 @@ def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn"):
             print(f"Error in game {game_num}: {e}")
         
         finally:
-            # Cleanup
-            white.quit()
-            black.quit()
+            # Each engine independently, so a failure on one still cleans
+            # up the other
+            for engine in (white, black):
+                try:
+                    engine.quit()
+                except Exception as exc:
+                    print(f"  Could not shut down {engine.name}: {exc}")
     
     save_games(games, pgn_path)
 
