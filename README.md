@@ -123,6 +123,30 @@ so a failure names the specific weakness rather than just a lower score.
 python tactics.py --verbose
 ```
 
+### Tuning evaluation weights
+
+`tune_eval.py` sweeps a weight and scores each value by how many
+centipawns Stockfish thinks the resulting move gives away. That is fast
+enough to try a range, which a self-play match per value is not:
+
+```bash
+cd classic_agent
+python tune_eval.py --list
+python tune_eval.py --weight BISHOP_PAIR_BONUS --values 0 30 50 80
+python tune_eval.py --all --quick
+```
+
+It is a proxy, so treat a hit as a candidate and confirm it with
+`selfplay.py`. That matters in practice:
+
+*   `BISHOP_PAIR_BONUS` looked 9% better raised, and self-play agreed. The
+    tuner's own pick of 200 scored 56%, but 50 scored 60%, so the proxy had
+    the direction right and the magnitude wrong. 50 is what shipped.
+*   `ISOLATED_PAWN_PENALTY` at 150 looked 2% better and then scored **27%**
+    in a self-play match, a severe regression.
+
+That second case is why the tuner now ignores gains below 5%.
+
 ### Time control
 
 `go` understands `movetime`, `depth`, `infinite`, and the usual
