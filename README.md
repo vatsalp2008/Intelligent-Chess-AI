@@ -254,9 +254,11 @@ worse when ported to this engine, and were not kept:
 | Stored-move ordering | 26% fewer nodes | 2% fewer, one position worse |
 | Static exchange evaluation | 32-38% fewer nodes | 19% *slower* overall |
 | Check extensions | 67% | 25% (clear regression) |
+| Bishop pair bonus at 50 | 60% | 44% (regression) |
 
-The two engines differ enough in evaluation and move ordering that a
-feature has to be measured on each one separately.
+Two of six ports helped. The two engines differ enough in evaluation and
+move ordering that a feature has to be measured on each one separately;
+"it helped the other engine" has turned out to be a poor predictor.
 
 ---
 
