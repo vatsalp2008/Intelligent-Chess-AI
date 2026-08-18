@@ -145,7 +145,12 @@ It is a proxy, so treat a hit as a candidate and confirm it with
 *   `ISOLATED_PAWN_PENALTY` at 150 looked 2% better and then scored **27%**
     in a self-play match, a severe regression.
 
-That second case is why the tuner now ignores gains below 5%.
+That second case is why the tuner now ignores gains below 5%. On freshly
+sampled positions the tuner's 200 is only 4% better than the shipped 50, so
+the threshold now rejects it as well.
+
+`--sample N` generates positions from played games instead of using the
+fixed set, which gives a steadier signal at the cost of a slower sweep.
 
 ### Time control
 
