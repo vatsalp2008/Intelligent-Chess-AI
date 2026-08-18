@@ -5,6 +5,9 @@ Creates CLEARER, more readable tree visualizations with better annotations
 Optimized for readability per assignment requirements
 """
 
+import argparse
+import os
+
 import chess
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -50,8 +53,13 @@ def simple_evaluate(board):
 
     return value
 
-def create_minimax_visualization():
-    """Create minimax tree from Queen's Gambit Declined"""
+def create_minimax_visualization(out_dir=".", show=False):
+    """Create minimax tree from Queen's Gambit Declined
+
+    Figures are written into out_dir. show only opens windows when asked,
+    because the usual point of running this is to produce the files, and a
+    blocking window is unwelcome over SSH or in a script.
+    """
     
     # Set up Queen's Gambit Declined position
     board = chess.Board()
@@ -72,8 +80,9 @@ def create_minimax_visualization():
                   fontsize=18, fontweight='bold', pad=20)
     draw_minimax_tree(ax1, board, show_pruning=False, show_annotations=False)
     plt.tight_layout()
-    plt.savefig("1_minimax_standard.png", dpi=150, bbox_inches='tight')
-    print("✓ Saved: 1_minimax_standard.png")
+    path1 = os.path.join(out_dir, "1_minimax_standard.png")
+    plt.savefig(path1, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved: {path1}")
     
     # Figure 2: With Alpha-Beta Pruning
     fig2 = plt.figure(figsize=(20, 14))
@@ -82,8 +91,9 @@ def create_minimax_visualization():
                   fontsize=18, fontweight='bold', pad=20)
     draw_minimax_tree(ax2, board, show_pruning=True, show_annotations=False)
     plt.tight_layout()
-    plt.savefig("2_alphabeta_pruning.png", dpi=150, bbox_inches='tight')
-    print("✓ Saved: 2_alphabeta_pruning.png")
+    path2 = os.path.join(out_dir, "2_alphabeta_pruning.png")
+    plt.savefig(path2, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved: {path2}")
     
     # Figure 3: With Manual Annotation Guide
     fig3 = plt.figure(figsize=(20, 16))
@@ -92,10 +102,15 @@ def create_minimax_visualization():
                   fontsize=18, fontweight='bold', pad=20)
     draw_minimax_tree(ax3, board, show_pruning=True, show_annotations=True)
     plt.tight_layout()
-    plt.savefig("3_alphabeta_annotated.png", dpi=150, bbox_inches='tight')
-    print("✓ Saved: 3_alphabeta_annotated.png")
+    path3 = os.path.join(out_dir, "3_alphabeta_annotated.png")
+    plt.savefig(path3, dpi=150, bbox_inches='tight')
+    print(f"✓ Saved: {path3}")
     
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        # Free the figures rather than leaving them open
+        plt.close('all')
 
 def draw_minimax_tree(ax, board, show_pruning=False, show_annotations=False):
     """Draw a minimax tree with clear layout and readable labels"""
@@ -478,14 +493,28 @@ def calculate_tree_positions(G, node_info, root):
     
     return pos
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate minimax and alpha-beta tree figures"
+    )
+    parser.add_argument("--out-dir", default=".",
+                        help="where to write the figures (default: current directory)")
+    parser.add_argument("--show", action="store_true",
+                        help="also open the figures in a window")
+    return parser.parse_args()
+
+
 def main():
     """Main function"""
+    args = parse_args()
+    os.makedirs(args.out_dir, exist_ok=True)
+
     print("=" * 60)
     print("Minimax Tree Visualization Generator")
     print("Queen's Gambit Declined Opening")
     print("=" * 60)
     
-    create_minimax_visualization()
+    create_minimax_visualization(args.out_dir, args.show)
     
     print("\n✅ Visualization complete!")
     print("\nGenerated files:")
