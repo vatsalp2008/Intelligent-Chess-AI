@@ -112,7 +112,7 @@ class TestSweepRestoresWeights(unittest.TestCase):
 
 
 class TestReport(unittest.TestCase):
-    def test_a_lower_loss_is_reported_as_a_candidate(self):
+    def test_a_clearly_lower_loss_is_reported_as_a_candidate(self):
         self.assertTrue(tune_eval.report("W", {10: 500, 20: 400}, 10))
 
     def test_a_higher_loss_is_not(self):
@@ -120,6 +120,26 @@ class TestReport(unittest.TestCase):
 
     def test_ties_keep_the_current_value(self):
         self.assertFalse(tune_eval.report("W", {10: 400, 20: 400}, 10))
+
+    def test_the_observed_false_positive_is_rejected(self):
+        """ISOLATED_PAWN_PENALTY 150 looked 2% better and scored 27% in a match
+
+        Pinning the real numbers means the threshold cannot quietly drift
+        back down to where it would wave that through again.
+        """
+        self.assertFalse(tune_eval.report("ISOLATED_PAWN_PENALTY", {12: 615, 150: 601}, 12))
+
+    def test_the_observed_true_positive_is_reported(self):
+        """BISHOP_PAIR_BONUS looked 9% better and held up in a match"""
+        self.assertTrue(tune_eval.report("BISHOP_PAIR_BONUS", {30: 615, 200: 560}, 30))
+
+    def test_the_threshold_sits_between_those_two_cases(self):
+        self.assertGreater(tune_eval.MIN_RELATIVE_GAIN, 14 / 615)
+        self.assertLess(tune_eval.MIN_RELATIVE_GAIN, 55 / 615)
+
+    def test_zero_loss_is_not_divided_by(self):
+        """A perfect score must not raise instead of reporting"""
+        self.assertFalse(tune_eval.report("W", {10: 0, 20: 0}, 10))
 
 
 if __name__ == "__main__":
