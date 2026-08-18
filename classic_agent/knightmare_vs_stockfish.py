@@ -557,43 +557,50 @@ def index():
 
 @app.route('/board')
 def get_board():
+    """Snapshot the position for the browser
+
+    Read under board_lock so a request that lands mid update sees
+    a whole position rather than one being changed underneath it.
+    """
     global game_board, move_history, stockfish_engine
 
-    svg = chess.svg.board(game_board, size=500)
+    with board_lock:
 
-    # Determine game status
-    if game_board.is_checkmate():
-        winner = "White" if game_board.turn == chess.BLACK else "Black"
-        if app.config.get('white_is_knightmare', False):
-            winner += " (Knightmare)" if winner == "White" else " (Stockfish)"
-        else:
-            winner += " (Stockfish)" if winner == "White" else " (Knightmare)"
-        status = f"Checkmate! {winner} wins!"
-    elif game_board.is_stalemate():
-        status = "Stalemate - Draw!"
-    elif game_board.is_insufficient_material():
-        status = "Draw - Insufficient material"
-    elif game_board.is_fifty_moves():
-        status = "Draw - 50 move rule"
-    elif game_board.is_game_over():
-        status = "Game Over"
-    else:
-        if app.config.get('white_is_knightmare', False):
-            turn = "White (Knightmare)" if game_board.turn == chess.WHITE else "Black (Stockfish)"
-        else:
-            turn = "White (Stockfish)" if game_board.turn == chess.WHITE else "Black (Knightmare)"
-        status = f"{turn} to move"
-        if game_board.is_check():
-            status += " - CHECK!"
+        svg = chess.svg.board(game_board, size=500)
 
-    return jsonify({
-        'svg': svg,
-        'status': status,
-        'moves': move_history,
-        'game_over': game_board.is_game_over(),
-        'white_to_move': game_board.turn == chess.WHITE,
-        'stockfish_available': stockfish_engine is not None
-    })
+        # Determine game status
+        if game_board.is_checkmate():
+            winner = "White" if game_board.turn == chess.BLACK else "Black"
+            if app.config.get('white_is_knightmare', False):
+                winner += " (Knightmare)" if winner == "White" else " (Stockfish)"
+            else:
+                winner += " (Stockfish)" if winner == "White" else " (Knightmare)"
+            status = f"Checkmate! {winner} wins!"
+        elif game_board.is_stalemate():
+            status = "Stalemate - Draw!"
+        elif game_board.is_insufficient_material():
+            status = "Draw - Insufficient material"
+        elif game_board.is_fifty_moves():
+            status = "Draw - 50 move rule"
+        elif game_board.is_game_over():
+            status = "Game Over"
+        else:
+            if app.config.get('white_is_knightmare', False):
+                turn = "White (Knightmare)" if game_board.turn == chess.WHITE else "Black (Stockfish)"
+            else:
+                turn = "White (Stockfish)" if game_board.turn == chess.WHITE else "Black (Knightmare)"
+            status = f"{turn} to move"
+            if game_board.is_check():
+                status += " - CHECK!"
+
+        return jsonify({
+            'svg': svg,
+            'status': status,
+            'moves': move_history,
+            'game_over': game_board.is_game_over(),
+            'white_to_move': game_board.turn == chess.WHITE,
+            'stockfish_available': stockfish_engine is not None
+        })
 
 @app.route('/new_game', methods=['POST'])
 def new_game():

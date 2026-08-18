@@ -141,47 +141,47 @@ HTML = """
 </head>
 <body>
     <h1>♔ Knightmare vs Random Bot ♚</h1>
-    
+
     <div class="container">
         <div class="board-container">
             <div id="board">Loading...</div>
         </div>
-        
+
         <div class="controls">
             <h2>Game Controls</h2>
-            
+
             <div class="player-indicator" id="white-player">
                 ⚪ White: Random Bot
             </div>
             <div class="player-indicator" id="black-player">
                 ⚫ Black: Knightmare
             </div>
-            
+
             <div id="status">Ready</div>
-            
+
             <button onclick="newGame()">New Game</button>
             <button onclick="makeMove()">Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">Auto Play: OFF</button>
-            
+
             <h3>Move History</h3>
             <div id="moves"></div>
         </div>
     </div>
-    
+
     <script>
         let autoPlay = false;
         let autoTimer = null;
 
         // Breathing room between moves so the board is visible
         const AUTO_PLAY_GAP_MS = 250;
-        
+
         function updateBoard() {
             return fetch('/board')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('board').innerHTML = data.svg;
                     document.getElementById('status').textContent = data.status;
-                    
+
                     // Update move history
                     let movesHtml = '';
                     for (let i = 0; i < data.moves.length; i += 2) {
@@ -192,7 +192,7 @@ HTML = """
                     }
                     document.getElementById('moves').innerHTML = movesHtml;
                     document.getElementById('moves').scrollTop = document.getElementById('moves').scrollHeight;
-                    
+
                     // Update player indicators
                     if (data.white_to_move) {
                         document.getElementById('white-player').className = 'player-indicator active';
@@ -201,7 +201,7 @@ HTML = """
                         document.getElementById('white-player').className = 'player-indicator inactive';
                         document.getElementById('black-player').className = 'player-indicator active';
                     }
-                    
+
                     // Stop auto play if game over
                     if (data.game_over && autoPlay) {
                         stopAuto();
@@ -212,13 +212,13 @@ HTML = """
                         'Could not load the board: ' + error;
                 });
         }
-        
+
         function newGame() {
             stopAuto();
             fetch('/new_game', {method: 'POST'})
                 .then(() => updateBoard());
         }
-        
+
         function makeMove() {
             // Returns a promise so auto play can wait for the move to land
             return fetch('/move', {method: 'POST'})
@@ -269,7 +269,7 @@ HTML = """
                 document.getElementById('auto-btn').className = '';
             }
         }
-        
+
         // Load board on startup
         updateBoard();
     </script>
@@ -283,35 +283,42 @@ def index():
 
 @app.route('/board')
 def get_board():
+    """Snapshot the position for the browser
+
+    Read under board_lock so a request that lands mid update sees
+    a whole position rather than one being changed underneath it.
+    """
     global game_board, move_history
-    
-    svg = chess.svg.board(game_board, size=500)
-    
-    # Determine game status
-    if game_board.is_checkmate():
-        winner = "White (Random)" if game_board.turn == chess.BLACK else "Black (Knightmare)"
-        status = f"Checkmate! {winner} wins!"
-    elif game_board.is_stalemate():
-        status = "Stalemate - Draw!"
-    elif game_board.is_insufficient_material():
-        status = "Draw - Insufficient material"
-    elif game_board.is_fifty_moves():
-        status = "Draw - 50 move rule"
-    elif game_board.is_game_over():
-        status = "Game Over"
-    else:
-        turn = "White (Random)" if game_board.turn == chess.WHITE else "Black (Knightmare)"
-        status = f"{turn} to move"
-        if game_board.is_check():
-            status += " - CHECK!"
-    
-    return jsonify({
-        'svg': svg,
-        'status': status,
-        'moves': move_history,
-        'game_over': game_board.is_game_over(),
-        'white_to_move': game_board.turn == chess.WHITE
-    })
+
+    with board_lock:
+
+        svg = chess.svg.board(game_board, size=500)
+
+        # Determine game status
+        if game_board.is_checkmate():
+            winner = "White (Random)" if game_board.turn == chess.BLACK else "Black (Knightmare)"
+            status = f"Checkmate! {winner} wins!"
+        elif game_board.is_stalemate():
+            status = "Stalemate - Draw!"
+        elif game_board.is_insufficient_material():
+            status = "Draw - Insufficient material"
+        elif game_board.is_fifty_moves():
+            status = "Draw - 50 move rule"
+        elif game_board.is_game_over():
+            status = "Game Over"
+        else:
+            turn = "White (Random)" if game_board.turn == chess.WHITE else "Black (Knightmare)"
+            status = f"{turn} to move"
+            if game_board.is_check():
+                status += " - CHECK!"
+
+        return jsonify({
+            'svg': svg,
+            'status': status,
+            'moves': move_history,
+            'game_over': game_board.is_game_over(),
+            'white_to_move': game_board.turn == chess.WHITE
+        })
 
 @app.route('/new_game', methods=['POST'])
 def new_game():
