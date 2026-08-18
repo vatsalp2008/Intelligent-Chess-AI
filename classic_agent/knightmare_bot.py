@@ -20,8 +20,11 @@ PIECE_VALUES = {
     chess.KING: 20000
 }
 
-# Extra credit for keeping both bishops
-BISHOP_PAIR_BONUS = 30
+# Extra credit for keeping both bishops. Raised from 30 after tune_eval.py
+# pointed at a higher value and selfplay.py confirmed 50 (60% over 24 games).
+# The tuner's own suggestion of 200 only scored 56% and is far above what a
+# bishop pair is actually worth, so the proxy overshot the magnitude.
+BISHOP_PAIR_BONUS = 50
 
 # Score for a mate delivered at ply 0; deeper mates score slightly lower
 MATE_SCORE = 10000
