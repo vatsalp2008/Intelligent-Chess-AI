@@ -195,6 +195,44 @@ def report(name, losses, original):
     return False
 
 
+def sample_positions(count, plies=(4, 8, 12)):
+    """Play games out and take middlegame positions from them
+
+    Generated rather than written by hand, so every position is legal by
+    construction. More positions means a steadier signal, at the cost of a
+    slower sweep.
+    """
+    openings = [
+        ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"],
+        ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3"],
+        ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4"],
+        ["c2c4", "e7e5", "b1c3", "g8f6", "g1f3"],
+        ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3"],
+        ["e2e4", "e7e6", "d2d4", "d7d5", "b1c3"],
+    ]
+
+    sampled = []
+    for opening in openings:
+        if len(sampled) >= count:
+            break
+        board = chess.Board()
+        for uci in opening:
+            board.push(chess.Move.from_uci(uci))
+
+        bot = knightmare_bot.KnightmareBot()
+        for ply in range(max(plies) + 1):
+            if board.is_game_over() or len(sampled) >= count:
+                break
+            move = bot.get_move(board, NO_TIME_LIMIT, 2)
+            if move is None or move not in board.legal_moves:
+                break
+            board.push(move)
+            if ply in plies:
+                sampled.append(board.fen())
+
+    return sampled
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Sweep evaluation weights")
     parser.add_argument("--weight", help="sweep a single named weight")
@@ -203,6 +241,8 @@ def parse_args():
     parser.add_argument("--list", action="store_true", help="list tunable weights and exit")
     parser.add_argument("--quick", action="store_true",
                         help="use half the positions, for a faster rough pass")
+    parser.add_argument("--sample", type=int, metavar="N",
+                        help="generate N fresh positions instead of the fixed set")
     return parser.parse_args()
 
 
@@ -220,7 +260,12 @@ def main():
         print("Stockfish not found. Install it or set STOCKFISH_PATH.")
         return 1
 
-    positions = POSITIONS[::2] if args.quick else POSITIONS
+    if args.sample:
+        print(f"Generating {args.sample} positions from played games...")
+        positions = sample_positions(args.sample)
+        print(f"  got {len(positions)}")
+    else:
+        positions = POSITIONS[::2] if args.quick else POSITIONS
 
     if args.weight:
         targets = {args.weight: args.values or TUNABLE.get(args.weight)}
