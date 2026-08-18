@@ -100,6 +100,42 @@ class TestEngineFailures(unittest.TestCase):
                 engine.send("isready")
 
 
+class TestShutdown(unittest.TestCase):
+    """Cleanup runs from finally blocks, so it must not raise"""
+
+    def engine(self, tmp):
+        path = write_engine(tmp, "mute.py", MUTE_ENGINE)
+        engine = ChessEngine(path, "MuteBot")
+        engine.start()
+        return engine
+
+    def test_quitting_twice_does_not_raise(self):
+        """A second quit used to raise and skip the rest of the cleanup"""
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = self.engine(tmp)
+            engine.quit()
+            engine.quit()  # must be a no-op, not a broken pipe
+
+    def test_the_process_is_reaped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = self.engine(tmp)
+            engine.quit()
+            self.assertIsNotNone(engine.process.poll())
+
+    def test_quitting_an_unstarted_engine_does_nothing(self):
+        engine = ChessEngine("never_started.py", "Ghost")
+        engine.quit()
+
+    def test_a_dead_engine_can_still_be_quit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_engine(tmp, "mute.py", MUTE_ENGINE)
+            engine = ChessEngine(path, "MuteBot")
+            engine.start()
+            engine.process.kill()
+            engine.process.wait(timeout=5)
+            engine.quit()  # already dead, still must not raise
+
+
 class TestGameResults(unittest.TestCase):
     def test_resigning_engine_loses(self):
         """Returning no move hands the game to the opponent"""
