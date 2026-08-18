@@ -8,7 +8,9 @@ settings. This scores a candidate far more cheaply: for a fixed set of
 positions, count how often the engine picks the move Stockfish prefers.
 
 Candidates are scored by how much Stockfish thinks our chosen move gives
-away, summed over the positions. Counting exact move matches was tried
+away, summed over the positions. Only differences above a threshold are
+reported, because small ones are noise: an ISOLATED_PAWN_PENALTY of 150
+once looked 2% better here and then scored 27% in a self-play match. Counting exact move matches was tried
 first and turned out to have too little resolution: every weight in a
 plausible range scored identically, because a change of 10 or 20
 centipawns rarely flips which move a depth-3 search prefers. Centipawn
@@ -68,6 +70,12 @@ NO_TIME_LIMIT = 600.0
 
 # Depth Stockfish is asked for its opinion at
 REFERENCE_DEPTH = 12
+
+# A candidate must beat the current value by at least this fraction of the
+# total centipawn loss before it is worth reporting. Smaller differences
+# turned out to be noise: a 2% gain on this measure once corresponded to a
+# 27% score in a self-play match, which is a severe regression.
+MIN_RELATIVE_GAIN = 0.05
 
 
 def find_stockfish():
@@ -162,13 +170,27 @@ def sweep_weight(engine, name, values, positions, best, cache, verbose=True):
 
 
 def report(name, losses, original):
-    """Say whether any value beat the one in the source"""
+    """Say whether any value beat the one in the source by enough to matter
+
+    A candidate has to clear MIN_RELATIVE_GAIN, because small differences on
+    this proxy do not survive a self-play match.
+    """
     # Ties go to the value already in the source
     best_value = min(losses, key=lambda v: (losses[v], v != original))
-    if losses[best_value] < losses[original]:
+    current = losses[original]
+    gain = current - losses[best_value]
+
+    if gain > 0 and current > 0 and gain / current >= MIN_RELATIVE_GAIN:
         print(f"  {name}: {best_value} gives away {losses[best_value]} cp vs "
-              f"{losses[original]} for the current {original} - worth confirming")
+              f"{current} for the current {original}, a {100 * gain / current:.0f}% "
+              "gain - worth confirming")
         return True
+
+    if gain > 0:
+        print(f"  {name}: {best_value} is only {100 * gain / max(current, 1):.0f}% "
+              f"better than the current {original}, which is within noise")
+        return False
+
     print(f"  {name}: current value {original} is as good as anything tried")
     return False
 
