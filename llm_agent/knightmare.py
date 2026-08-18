@@ -162,6 +162,19 @@ def piece_square_bonus(piece_type, square, color, endgame=False):
     return table[square_index(square, color)]
 
 
+def format_score(score):
+    """Render a search score the way UCI expects
+
+    Mate scores are reported as a distance in moves rather than as a very
+    large centipawn number.
+    """
+    if abs(score) >= MATE_SCORE - MAX_PLY:
+        plies_to_mate = MATE_SCORE - abs(score)
+        moves_to_mate = max(1, (plies_to_mate + 1) // 2)
+        return f"mate {moves_to_mate if score > 0 else -moves_to_mate}"
+    return f"cp {int(score)}"
+
+
 class KnightmareFast:
     def __init__(self):
         self.reset()
@@ -500,6 +513,14 @@ class KnightmareFast:
                 # CRITICAL: Verify the returned move is legal
                 if move and move in legal_moves:
                     best_move = move
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    nps = int(self.nodes / max(elapsed_ms / 1000.0, 0.001))
+                    print(
+                        f"info depth {depth} score {format_score(eval_score)} "
+                        f"nodes {self.nodes} time {elapsed_ms} nps {nps} "
+                        f"pv {move.uci()}",
+                        flush=True,
+                    )
 
                 last_iteration = time.time() - iteration_start
 
