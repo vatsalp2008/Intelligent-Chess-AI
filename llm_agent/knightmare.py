@@ -34,6 +34,10 @@ QUIESCENCE_DEPTH = 4
 # Deepest iteration started when no depth is requested
 DEFAULT_MAX_DEPTH = 4
 
+# Roughly how much more work each extra ply costs, used to decide whether
+# the next iteration will fit in the time that is left
+BRANCHING_ESTIMATE = 4.0
+
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
@@ -470,8 +474,19 @@ class KnightmareFast:
         # Iterative deepening. Scores from different depths are not
         # comparable, so always trust the deepest completed iteration
         # rather than keeping the best-looking score seen so far.
+        last_iteration = None
+
         for depth in range(1, max_depth + 1):
             self.nodes = 0
+            iteration_start = time.time()
+            elapsed = iteration_start - start_time
+
+            # Starting an iteration that cannot finish wastes the rest of
+            # the budget and its result is discarded anyway, so predict the
+            # cost from how long the previous depth actually took.
+            if last_iteration is not None:
+                if elapsed + last_iteration * BRANCHING_ESTIMATE > max_time:
+                    break
 
             try:
                 eval_score, move = self.minimax(
@@ -486,9 +501,7 @@ class KnightmareFast:
                 if move and move in legal_moves:
                     best_move = move
 
-                # Time check
-                if time.time() - start_time > max_time * 0.5:
-                    break
+                last_iteration = time.time() - iteration_start
 
             except Exception as e:
                 print(f"info string Error in minimax at depth {depth}: {e}")
