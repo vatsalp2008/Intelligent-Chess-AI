@@ -19,7 +19,7 @@ DEFAULT_PORT = 5001
 # Seconds the engine may think about each move
 THINK_SECONDS = 1.0
 
-from bot_loader import best_move, load_bot_class, random_move
+from bot_loader import ask_engine, load_bot_class, random_move
 
 bot_class = load_bot_class()
 
@@ -31,21 +31,27 @@ move_history = []
 knightmare = None
 board_lock = threading.Lock()
 
+# What the engine last reported about its search, shown in the interface
+last_engine_info = None
+
 def reset_game():
-    global game_board, move_history, knightmare
+    global game_board, move_history, knightmare, last_engine_info
     game_board = chess.Board()
     move_history = []
+    last_engine_info = None
     if bot_class:
         knightmare = bot_class()
 
 def get_knightmare_move(board):
-    """Get move from Knightmare bot"""
-    global knightmare
+    """Get move from Knightmare bot, remembering what it reported"""
+    global knightmare, last_engine_info
 
     if bot_class and knightmare is None:
         knightmare = bot_class()
 
-    return best_move(knightmare, board, THINK_SECONDS)
+    move, info = ask_engine(knightmare, board, THINK_SECONDS)
+    last_engine_info = info
+    return move
 
 def get_random_move(board):
     """Get random move"""
@@ -110,6 +116,15 @@ HTML = """
             margin: 10px 0;
             font-weight: bold;
         }
+        #engine {
+            padding: 8px;
+            background: #eef2ff;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 13px;
+            color: #333;
+        }
         #moves {
             max-height: 400px;
             overflow-y: auto;
@@ -158,6 +173,7 @@ HTML = """
             </div>
 
             <div id="status">Ready</div>
+            <div id="engine">Engine: waiting</div>
 
             <button onclick="newGame()">New Game</button>
             <button onclick="makeMove()">Make Move</button>
@@ -181,6 +197,13 @@ HTML = """
                 .then(data => {
                     document.getElementById('board').innerHTML = data.svg;
                     document.getElementById('status').textContent = data.status;
+
+                    // What the engine reported about its own search
+                    const engine = data.engine;
+                    document.getElementById('engine').textContent = engine
+                        ? 'Engine: depth ' + engine.depth + '  score ' +
+                          engine.score + '  line ' + engine.pv
+                        : 'Engine: no search (book move or random bot)';
 
                     // Update move history
                     let movesHtml = '';
@@ -288,7 +311,7 @@ def get_board():
     Read under board_lock so a request that lands mid update sees
     a whole position rather than one being changed underneath it.
     """
-    global game_board, move_history
+    global game_board, move_history, last_engine_info
 
     with board_lock:
 
@@ -317,7 +340,8 @@ def get_board():
             'status': status,
             'moves': move_history,
             'game_over': game_board.is_game_over(),
-            'white_to_move': game_board.turn == chess.WHITE
+            'white_to_move': game_board.turn == chess.WHITE,
+            'engine': last_engine_info,
         })
 
 @app.route('/new_game', methods=['POST'])
@@ -335,7 +359,7 @@ def make_move():
     same side. Auto play makes that routine rather than rare, because a
     move can take longer than the interval the browser fires on.
     """
-    global game_board, move_history
+    global game_board, move_history, last_engine_info
 
     with board_lock:
         if game_board.is_game_over():
