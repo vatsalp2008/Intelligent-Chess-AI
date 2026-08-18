@@ -80,6 +80,49 @@ def parse_info(text):
     return best
 
 
+def describe_info(info, board):
+    """Turn raw UCI info into something readable for a person
+
+    A score of "cp -104" and a line of "b8c6 d2d4" mean little at a glance;
+    "-1.04" and "Nc6 d4" mean rather more. The board is needed because SAN
+    depends on the position each move is played from.
+    """
+    if info is None:
+        return None
+
+    described = dict(info)
+
+    score = info.get("score", "")
+    if score.startswith("cp "):
+        try:
+            described["score_text"] = f"{int(score[3:]) / 100:+.2f}"
+        except ValueError:
+            described["score_text"] = score
+    elif score.startswith("mate "):
+        moves = score[5:]
+        described["score_text"] = f"mate in {moves.lstrip('-')}" + (
+            " for the opponent" if moves.startswith("-") else ""
+        )
+    else:
+        described["score_text"] = score
+
+    # Replay the line to name each move the way a player would
+    scratch = board.copy(stack=False)
+    san_moves = []
+    for uci in info.get("pv", "").split():
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if move not in scratch.legal_moves:
+            break
+        san_moves.append(scratch.san(move))
+        scratch.push(move)
+    described["pv_text"] = " ".join(san_moves)
+
+    return described
+
+
 def ask_engine(bot, board, seconds=1.0):
     """Ask the engine for a move, returning (move, info)
 
@@ -117,7 +160,7 @@ def ask_engine(bot, board, seconds=1.0):
     if move is None or move not in board.legal_moves:
         return random_move(board), None
 
-    return move, parse_info(text)
+    return move, describe_info(parse_info(text), board)
 
 
 def best_move(bot, board, seconds=1.0):

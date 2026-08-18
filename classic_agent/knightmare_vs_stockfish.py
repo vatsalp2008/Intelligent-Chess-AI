@@ -408,6 +408,13 @@ HTML = """
                     statusEl.textContent = data.status;
                     statusEl.className = '';
 
+                    // What Knightmare reported about its own search
+                    const engine = data.engine;
+                    document.getElementById('engine').textContent = engine
+                        ? 'Knightmare: depth ' + engine.depth + '  score ' +
+                          engine.score_text + '  line ' + engine.pv_text
+                        : 'Knightmare: no search yet';
+
                     if (data.status.includes('Checkmate')) {
                         statusEl.className = 'checkmate';
                     } else if (data.status.includes('CHECK')) {

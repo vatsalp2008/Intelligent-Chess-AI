@@ -202,7 +202,7 @@ HTML = """
                     const engine = data.engine;
                     document.getElementById('engine').textContent = engine
                         ? 'Engine: depth ' + engine.depth + '  score ' +
-                          engine.score + '  line ' + engine.pv
+                          engine.score_text + '  line ' + engine.pv_text
                         : 'Engine: no search (book move or random bot)';
 
                     // Update move history
