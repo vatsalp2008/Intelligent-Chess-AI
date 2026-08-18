@@ -40,6 +40,13 @@ jobs:
         working-directory: classic_agent
         run: python -m unittest discover -p "test_bot_loader.py" -v
 
+      - name: Run web interface concurrency tests
+        # Needs Flask, which the minimal install above does not include
+        working-directory: classic_agent
+        run: |
+          python -m pip install --quiet flask
+          python -m unittest discover -p "test_web_concurrency.py" -v
+
       - name: Run tournament runner tests
         working-directory: classic_agent
         run: python -m unittest discover -p "test_tournament.py" -v
