@@ -16,7 +16,7 @@ from knightmare import (
     TT_EXACT,
     TT_MAX_ENTRIES,
     KnightmareFast,
-    get_piece_square_value,
+    piece_square_bonus,
 )
 
 INFINITY = float("inf")
@@ -302,24 +302,26 @@ class TestTranspositionTable(unittest.TestCase):
 
 
 class TestPieceSquareValues(unittest.TestCase):
+    """Table orientation is easy to get backwards, so pin it down"""
+
     def test_pawns_are_rewarded_for_advancing(self):
-        near = get_piece_square_value(chess.PAWN, chess.A2, chess.WHITE)
-        far = get_piece_square_value(chess.PAWN, chess.A7, chess.WHITE)
+        near = piece_square_bonus(chess.PAWN, chess.A2, chess.WHITE)
+        far = piece_square_bonus(chess.PAWN, chess.A7, chess.WHITE)
         self.assertGreater(far, near)
 
     def test_pawn_advancement_is_mirrored_for_black(self):
-        white = get_piece_square_value(chess.PAWN, chess.A7, chess.WHITE)
-        black = get_piece_square_value(chess.PAWN, chess.A2, chess.BLACK)
+        white = piece_square_bonus(chess.PAWN, chess.A7, chess.WHITE)
+        black = piece_square_bonus(chess.PAWN, chess.A2, chess.BLACK)
         self.assertEqual(white, black)
 
     def test_knights_prefer_the_centre(self):
-        centre = get_piece_square_value(chess.KNIGHT, chess.D4, chess.WHITE)
-        corner = get_piece_square_value(chess.KNIGHT, chess.A1, chess.WHITE)
+        centre = piece_square_bonus(chess.KNIGHT, chess.D4, chess.WHITE)
+        corner = piece_square_bonus(chess.KNIGHT, chess.A1, chess.WHITE)
         self.assertGreater(centre, corner)
 
     def test_king_seeks_the_centre_only_in_the_endgame(self):
-        middlegame = get_piece_square_value(chess.KING, chess.D4, chess.WHITE, endgame=False)
-        endgame = get_piece_square_value(chess.KING, chess.D4, chess.WHITE, endgame=True)
+        middlegame = piece_square_bonus(chess.KING, chess.D4, chess.WHITE, endgame=False)
+        endgame = piece_square_bonus(chess.KING, chess.D4, chess.WHITE, endgame=True)
         self.assertGreater(endgame, middlegame)
 
     def test_piece_values_are_ordered_sensibly(self):

@@ -43,38 +43,120 @@ MATE_SCORE = 30000
 # Scores within this margin of MATE_SCORE count as mate scores
 MAX_PLY = 100
 
-# Simplified piece-square tables
-def get_piece_square_value(piece_type, square, color, endgame=False):
-    """Get positional value for a piece on a square"""
-    # Simple center bonus
-    file = chess.square_file(square)
-    rank = chess.square_rank(square)
-    
-    center_distance = abs(3.5 - file) + abs(3.5 - rank)
-    center_bonus = int((7 - center_distance) * 5)
-    
-    if piece_type == chess.PAWN:
-        # Pawns get bonus for advancement
-        if color == chess.WHITE:
-            return rank * 10 + center_bonus
-        else:
-            return (7 - rank) * 10 + center_bonus
-    elif piece_type == chess.KING:
-        if endgame:
-            # King should be active in endgame
-            return center_bonus
-        else:
-            # King should be safe in middlegame
-            if color == chess.WHITE:
-                if square in [chess.G1, chess.C1, chess.B1]:
-                    return 30
-            else:
-                if square in [chess.G8, chess.C8, chess.B8]:
-                    return 30
-            return -center_bonus
+# Piece-square tables, written from White's point of view with rank 8 on the
+# first row so they read like a board. Values are centipawn adjustments on
+# top of the piece value. Black looks them up through a mirrored square.
+PAWN_TABLE = [
+     0,   0,   0,   0,   0,   0,   0,   0,
+    50,  50,  50,  50,  50,  50,  50,  50,
+    10,  10,  20,  30,  30,  20,  10,  10,
+     5,   5,  10,  25,  25,  10,   5,   5,
+     0,   0,   0,  20,  20,   0,   0,   0,
+     5,  -5, -10,   0,   0, -10,  -5,   5,
+     5,  10,  10, -20, -20,  10,  10,   5,
+     0,   0,   0,   0,   0,   0,   0,   0,
+]
+
+KNIGHT_TABLE = [
+   -50, -40, -30, -30, -30, -30, -40, -50,
+   -40, -20,   0,   0,   0,   0, -20, -40,
+   -30,   0,  10,  15,  15,  10,   0, -30,
+   -30,   5,  15,  20,  20,  15,   5, -30,
+   -30,   0,  15,  20,  20,  15,   0, -30,
+   -30,   5,  10,  15,  15,  10,   5, -30,
+   -40, -20,   0,   5,   5,   0, -20, -40,
+   -50, -40, -30, -30, -30, -30, -40, -50,
+]
+
+BISHOP_TABLE = [
+   -20, -10, -10, -10, -10, -10, -10, -20,
+   -10,   0,   0,   0,   0,   0,   0, -10,
+   -10,   0,   5,  10,  10,   5,   0, -10,
+   -10,   5,   5,  10,  10,   5,   5, -10,
+   -10,   0,  10,  10,  10,  10,   0, -10,
+   -10,  10,  10,  10,  10,  10,  10, -10,
+   -10,   5,   0,   0,   0,   0,   5, -10,
+   -20, -10, -10, -10, -10, -10, -10, -20,
+]
+
+ROOK_TABLE = [
+     0,   0,   0,   0,   0,   0,   0,   0,
+     5,  10,  10,  10,  10,  10,  10,   5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+    -5,   0,   0,   0,   0,   0,   0,  -5,
+     0,   0,   0,   5,   5,   0,   0,   0,
+]
+
+QUEEN_TABLE = [
+   -20, -10, -10,  -5,  -5, -10, -10, -20,
+   -10,   0,   0,   0,   0,   0,   0, -10,
+   -10,   0,   5,   5,   5,   5,   0, -10,
+    -5,   0,   5,   5,   5,   5,   0,  -5,
+     0,   0,   5,   5,   5,   5,   0,  -5,
+   -10,   5,   5,   5,   5,   5,   0, -10,
+   -10,   0,   5,   0,   0,   0,   0, -10,
+   -20, -10, -10,  -5,  -5, -10, -10, -20,
+]
+
+# The king wants shelter early on and activity once the queens come off
+KING_MIDDLEGAME_TABLE = [
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -30, -40, -40, -50, -50, -40, -40, -30,
+   -20, -30, -30, -40, -40, -30, -30, -20,
+   -10, -20, -20, -20, -20, -20, -20, -10,
+    20,  20,   0,   0,   0,   0,  20,  20,
+    20,  30,  10,   0,   0,  10,  30,  20,
+]
+
+KING_ENDGAME_TABLE = [
+   -50, -40, -30, -20, -20, -30, -40, -50,
+   -30, -20, -10,   0,   0, -10, -20, -30,
+   -30, -10,  20,  30,  30,  20, -10, -30,
+   -30, -10,  30,  40,  40,  30, -10, -30,
+   -30, -10,  30,  40,  40,  30, -10, -30,
+   -30, -10,  20,  30,  30,  20, -10, -30,
+   -30, -30,   0,   0,   0,   0, -30, -30,
+   -50, -30, -30, -30, -30, -30, -30, -50,
+]
+
+PIECE_SQUARE_TABLES = {
+    chess.PAWN: PAWN_TABLE,
+    chess.KNIGHT: KNIGHT_TABLE,
+    chess.BISHOP: BISHOP_TABLE,
+    chess.ROOK: ROOK_TABLE,
+    chess.QUEEN: QUEEN_TABLE,
+    chess.KING: KING_MIDDLEGAME_TABLE,
+}
+
+
+def square_index(square, color):
+    """Index into a piece-square table for the given side
+
+    The tables are written with rank 8 first, so White reads them upside
+    down and Black reads them through a vertical mirror.
+    """
+    if color == chess.WHITE:
+        return chess.square_mirror(square)
+    return square
+
+
+
+
+
+
+def piece_square_bonus(piece_type, square, color, endgame=False):
+    """Positional bonus for a piece standing on a square"""
+    if piece_type == chess.KING and endgame:
+        table = KING_ENDGAME_TABLE
     else:
-        # Other pieces benefit from central positions
-        return center_bonus
+        table = PIECE_SQUARE_TABLES[piece_type]
+    return table[square_index(square, color)]
+
 
 class KnightmareFast:
     def __init__(self):
@@ -179,7 +261,7 @@ class KnightmareFast:
             piece = board.piece_at(square)
             if piece:
                 piece_value = PIECE_VALUES[piece.piece_type]
-                position_value = get_piece_square_value(
+                position_value = piece_square_bonus(
                     piece.piece_type, square, piece.color, endgame
                 )
                 
