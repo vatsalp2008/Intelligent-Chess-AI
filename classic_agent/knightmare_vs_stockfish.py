@@ -372,13 +372,17 @@ HTML = """
     </div>
 
     <script>
-        let autoPlay = null;
+        let autoPlay = false;
+        let autoTimer = null;
+
+        // Breathing room between moves so the board is visible
+        const AUTO_PLAY_GAP_MS = 250;
         let stockfishLevel = 1;
         let stockfishTime = 0.1;
         let whiteIsKnightmare = false;
 
         function updateBoard() {
-            fetch('/board')
+            return fetch('/board')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('board').innerHTML = data.svg;
@@ -433,6 +437,10 @@ HTML = """
                             }
                         }, 500);
                     }
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent =
+                        'Could not load the board: ' + error;
                 });
         }
 
@@ -486,31 +494,51 @@ HTML = """
         }
 
         function makeMove() {
-            fetch('/move', {method: 'POST'})
+            // Returns a promise so auto play can wait for the move to land
+            return fetch('/move', {method: 'POST'})
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
                         console.error(data.error);
                     }
-                    updateBoard();
+                    return updateBoard();
+                })
+                .catch(error => {
+                    // A dead server would otherwise just stop updating
+                    document.getElementById('status').textContent =
+                        'Lost contact with the server: ' + error;
+                    stopAuto();
                 });
+        }
+
+        function autoStep() {
+            // Chained rather than on a timer: Knightmare may think for
+            // longer than any fixed interval, and overlapping requests
+            // would each play a move for the same side.
+            if (!autoPlay) { return; }
+            makeMove().then(() => {
+                if (autoPlay) {
+                    autoTimer = setTimeout(autoStep, AUTO_PLAY_GAP_MS);
+                }
+            });
         }
 
         function toggleAuto() {
             if (autoPlay) {
                 stopAuto();
             } else {
+                autoPlay = true;
                 document.getElementById('auto-btn').textContent = '⏸️ Auto Play: ON';
                 document.getElementById('auto-btn').className = 'active';
-                autoPlay = setInterval(makeMove, 1500);
-                makeMove();  // Make first move immediately
+                autoStep();
             }
         }
 
         function stopAuto() {
-            if (autoPlay) {
-                clearInterval(autoPlay);
-                autoPlay = null;
+            if (autoPlay || autoTimer) {
+                autoPlay = false;
+                clearTimeout(autoTimer);
+                autoTimer = null;
                 document.getElementById('auto-btn').textContent = '🔄 Auto Play: OFF';
                 document.getElementById('auto-btn').className = '';
             }
