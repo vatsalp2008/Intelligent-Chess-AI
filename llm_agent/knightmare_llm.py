@@ -174,7 +174,7 @@ def uci(msg):
                             move = chess.Move.from_uci(move_uci)
                             if move in global_board.legal_moves:
                                 global_board.push(move)
-                        except:
+                        except ValueError:
                             pass
         elif "fen" in msg:
             fen_start = msg.find("fen") + 4
@@ -190,9 +190,9 @@ def uci(msg):
                                 move = chess.Move.from_uci(move_uci)
                                 if move in global_board.legal_moves:
                                     global_board.push(move)
-                            except:
+                            except ValueError:
                                 pass
-            except:
+            except ValueError:
                 global_board = chess.Board()
                 
     elif msg.startswith("go"):

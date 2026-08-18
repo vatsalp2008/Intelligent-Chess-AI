@@ -157,7 +157,7 @@ Reply with just the move (like e2e4)."""
                 move = chess.Move.from_uci(move_str)
                 if move in legal_moves:
                     return move, None
-            except:
+            except ValueError:
                 pass
         
         # Strategy 2: Look for 4-5 character sequences
@@ -166,7 +166,7 @@ Reply with just the move (like e2e4)."""
                 move = chess.Move.from_uci(match)
                 if move in legal_moves:
                     return move, None
-            except:
+            except ValueError:
                 pass
         
         # Strategy 3: Check if any legal move is mentioned
@@ -339,7 +339,7 @@ def uci(msg):
                             move = chess.Move.from_uci(move_uci)
                             if move in global_board.legal_moves:
                                 global_board.push(move)
-                        except:
+                        except ValueError:
                             pass
         
         elif "fen" in msg:
@@ -362,9 +362,9 @@ def uci(msg):
                                 move = chess.Move.from_uci(move_uci)
                                 if move in global_board.legal_moves:
                                     global_board.push(move)
-                            except:
+                            except ValueError:
                                 pass
-            except:
+            except ValueError:
                 global_board = chess.Board()
                 
     elif msg.startswith("go"):
