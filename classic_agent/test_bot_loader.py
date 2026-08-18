@@ -14,7 +14,14 @@ import unittest
 
 import chess
 
-from bot_loader import ask_engine, best_move, load_bot_class, parse_info, random_move
+from bot_loader import (
+    ask_engine,
+    best_move,
+    describe_info,
+    load_bot_class,
+    parse_info,
+    random_move,
+)
 
 
 class BrokenBot:
@@ -163,6 +170,60 @@ class TestParseInfo(unittest.TestCase):
 
     def test_unrelated_output_is_ignored(self):
         self.assertIsNone(parse_info("readyok\nbestmove e2e4\n"))
+
+
+class TestDescribeInfo(unittest.TestCase):
+    """Raw UCI is unreadable at a glance, so it gets translated"""
+
+    def setUp(self):
+        self.board = chess.Board(
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        )
+
+    def describe(self, score="cp 0", pv=""):
+        return describe_info({"depth": 3, "score": score, "pv": pv}, self.board)
+
+    def test_centipawns_become_pawns(self):
+        self.assertEqual(self.describe(score="cp -104")["score_text"], "-1.04")
+        self.assertEqual(self.describe(score="cp 250")["score_text"], "+2.50")
+
+    def test_zero_keeps_its_sign(self):
+        self.assertEqual(self.describe(score="cp 0")["score_text"], "+0.00")
+
+    def test_mate_scores_are_spelled_out(self):
+        self.assertEqual(self.describe(score="mate 2")["score_text"], "mate in 2")
+
+    def test_being_mated_says_so(self):
+        self.assertIn("opponent", self.describe(score="mate -3")["score_text"])
+
+    def test_the_line_becomes_algebraic(self):
+        self.assertEqual(self.describe(pv="b1c3 f8c5 d2d4")["pv_text"], "Nc3 Bc5 d4")
+
+    def test_the_raw_values_are_kept_too(self):
+        described = self.describe(score="cp -104", pv="b1c3")
+        self.assertEqual(described["score"], "cp -104")
+        self.assertEqual(described["pv"], "b1c3")
+
+    def test_an_illegal_line_stops_where_it_breaks(self):
+        """A stale line must not be reported as if it were playable"""
+        self.assertEqual(self.describe(pv="b1c3 a1a8 d2d4")["pv_text"], "Nc3")
+
+    def test_a_malformed_line_is_survived(self):
+        self.assertEqual(self.describe(pv="not-a-move")["pv_text"], "")
+
+    def test_an_empty_line_gives_empty_text(self):
+        self.assertEqual(self.describe(pv="")["pv_text"], "")
+
+    def test_nothing_in_gives_nothing_out(self):
+        self.assertIsNone(describe_info(None, self.board))
+
+    def test_the_board_is_not_disturbed(self):
+        before = self.board.fen()
+        self.describe(pv="b1c3 f8c5 d2d4")
+        self.assertEqual(self.board.fen(), before)
+
+    def test_an_unexpected_score_format_is_passed_through(self):
+        self.assertEqual(self.describe(score="lowerbound")["score_text"], "lowerbound")
 
 
 class TestAskEngine(unittest.TestCase):
