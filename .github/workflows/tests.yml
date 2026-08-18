@@ -53,6 +53,10 @@ jobs:
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
 
+      - name: Check the duplicated evaluation tables still match
+        working-directory: llm_agent
+        run: python -m unittest discover -p "test_shared_tables.py" -v
+
       - name: Run LLM tournament scoring tests
         # chester is not installed here, which the optional import allows
         working-directory: llm_agent
