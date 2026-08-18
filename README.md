@@ -191,6 +191,17 @@ An experimental agent that prompts local LLMs to play chess.
 
 ### Usage
 
+**Run the Tournament**
+
+A round robin between the LLM bot and the three classical baselines. Needs
+`chester` (in `requirements.txt`) and Ollama running for the LLM bot:
+
+```bash
+cd llm_agent
+python tournament.py                  # 4 games per pairing
+python tournament.py --games 8 --quiet
+```
+
 **Run LLM Bot**
 *Ensure Ollama is running (`ollama serve`).*
 
