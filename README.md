@@ -163,6 +163,17 @@ python simple_web_chess.py                  # http://127.0.0.1:5001
 python simple_web_chess.py --port 8080      # pick another port
 ```
 
+Both interfaces show what the engine thought about its last move: the depth
+it reached, the score in pawns, and the line it expected, in algebraic
+notation. A book move reports no search, because none happened.
+
+Auto play chains each move off the previous one rather than firing on a
+timer. A fixed interval overlapped requests once a move took longer than the
+interval, and because the board is a shared global that produced impossible
+games: five consecutive Black moves in one recorded case. The board is now
+also guarded by a lock on the server, since the development server is
+threaded.
+
 **Play Against Stockfish**
 ```bash
 cd classic_agent
@@ -181,7 +192,17 @@ Every game is written to `tournament.pgn` by default so results can be replayed.
 
 **Run Tests**
 
-Only `chess` is needed for the test suites:
+Everything at once:
+```bash
+./run_tests.sh          # every suite
+./run_tests.sh --quick  # skip the slower end-to-end checks
+```
+
+That is also what CI runs, so there is one list of suites rather than two.
+Suites needing a package that is not installed are reported as skipped
+rather than failing.
+
+Or individually. Only `chess` is needed for most of them:
 ```bash
 pip install -r requirements-dev.txt
 
