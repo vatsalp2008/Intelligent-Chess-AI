@@ -44,11 +44,20 @@ def uci(msg: str):
     
 def main():
     '''Expects to forever be passed UCI messages'''
-    try:
-        while True:
-            uci(input())
-    except Exception:
-        print("Fatal Error")
+    while True:
+        try:
+            line = input()
+        except (EOFError, KeyboardInterrupt):
+            # The host closed the pipe, which is a normal way to finish
+            break
+
+        try:
+            uci(line)
+        except Exception as exc:
+            # Report what actually went wrong instead of "Fatal Error",
+            # and keep going so one bad command does not end the game
+            print(f"info string Error handling {line!r}: {exc}")
+            sys.stdout.flush()
 
 if __name__ == "__main__":
     # print(sys.argv)
