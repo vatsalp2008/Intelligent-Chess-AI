@@ -543,7 +543,7 @@ def uci(msg):
                                 global_board.push(move)
                             else:
                                 print(f"info string Illegal move in position: {move_uci}")
-                        except:
+                        except ValueError:
                             print(f"info string Invalid move format: {move_uci}")
         
         elif "fen" in msg:
@@ -566,9 +566,9 @@ def uci(msg):
                                 move = chess.Move.from_uci(move_uci)
                                 if move in global_board.legal_moves:
                                     global_board.push(move)
-                            except:
+                            except ValueError:
                                 pass
-            except:
+            except ValueError:
                 print("info string Invalid FEN, using startpos")
                 global_board = chess.Board()
                 
@@ -585,7 +585,7 @@ def uci(msg):
             if idx + 1 < len(parts):
                 try:
                     max_time = int(parts[idx + 1]) / 1000.0
-                except:
+                except ValueError:
                     pass
         
         # Get best move
