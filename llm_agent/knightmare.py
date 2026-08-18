@@ -38,6 +38,15 @@ DEFAULT_MAX_DEPTH = 4
 # the next iteration will fit in the time that is left
 BRANCHING_ESTIMATE = 4.0
 
+# Hard ceiling for an explicitly requested search depth
+MAX_SEARCH_DEPTH = 6
+
+# Seconds to think when the go command carries no time information
+DEFAULT_MOVE_TIME = 2.0
+
+# Longest we will ever think about a single move
+MAX_MOVE_TIME = 10.0
+
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
@@ -540,6 +549,43 @@ class KnightmareFast:
         
         return best_move
 
+def token_value(parts, name):
+    """The integer argument following a go token, if it is present"""
+    if name not in parts:
+        return None
+    idx = parts.index(name)
+    if idx + 1 >= len(parts):
+        return None
+    try:
+        return int(parts[idx + 1])
+    except ValueError:
+        return None
+
+
+def parse_go(msg):
+    """Work out a (seconds, max_depth) budget for a go command"""
+    parts = msg.split()
+
+    max_time = DEFAULT_MOVE_TIME
+    max_depth = DEFAULT_MAX_DEPTH
+
+    movetime = token_value(parts, "movetime")
+    if movetime is not None:
+        max_time = max(0.1, movetime / 1000.0)
+
+    depth = token_value(parts, "depth")
+    if depth is not None and depth > 0:
+        max_depth = min(depth, MAX_SEARCH_DEPTH)
+        # An explicit depth should not be cut short by the default clock
+        if movetime is None:
+            max_time = MAX_MOVE_TIME
+
+    if "infinite" in parts:
+        max_time = MAX_MOVE_TIME
+
+    return max_time, max_depth
+
+
 # Global variables for UCI
 global_bot = None
 global_board = chess.Board()
@@ -615,20 +661,10 @@ def uci(msg):
         if global_bot is None:
             global_bot = KnightmareFast()
         
-        # Parse time control
-        max_time = 2.0
-        parts = msg.split()
-        
-        if "movetime" in parts:
-            idx = parts.index("movetime")
-            if idx + 1 < len(parts):
-                try:
-                    max_time = int(parts[idx + 1]) / 1000.0
-                except ValueError:
-                    pass
-        
+        max_time, max_depth = parse_go(msg)
+
         # Get best move
-        move = global_bot.get_best_move(global_board, max_time)
+        move = global_bot.get_best_move(global_board, max_time, max_depth)
         
         if move and move in global_board.legal_moves:
             print(f"bestmove {move}")
