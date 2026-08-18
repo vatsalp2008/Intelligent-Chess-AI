@@ -12,8 +12,13 @@ import unittest
 import chess
 
 from knightmare import (
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_MOVE_TIME,
     MATE_SCORE,
+    MAX_MOVE_TIME,
+    MAX_SEARCH_DEPTH,
     format_score,
+    parse_go,
     PIECE_VALUES,
     TT_EXACT,
     TT_MAX_ENTRIES,
@@ -370,6 +375,35 @@ class TestTimeBudget(unittest.TestCase):
         shallow.get_best_move(board.copy(), 600.0, 2)
         deep.get_best_move(board.copy(), 600.0, 4)
         self.assertLess(shallow.nodes, deep.nodes)
+
+
+class TestGoParsing(unittest.TestCase):
+    def test_bare_go_uses_defaults(self):
+        self.assertEqual(parse_go("go"), (DEFAULT_MOVE_TIME, DEFAULT_MAX_DEPTH))
+
+    def test_movetime_is_converted_to_seconds(self):
+        self.assertEqual(parse_go("go movetime 500")[0], 0.5)
+
+    def test_tiny_movetime_is_floored(self):
+        self.assertEqual(parse_go("go movetime 1")[0], 0.1)
+
+    def test_depth_is_honoured_and_capped(self):
+        self.assertEqual(parse_go("go depth 2")[1], 2)
+        self.assertEqual(parse_go("go depth 999")[1], MAX_SEARCH_DEPTH)
+
+    def test_an_explicit_depth_is_not_cut_short_by_the_default_clock(self):
+        self.assertEqual(parse_go("go depth 2")[0], MAX_MOVE_TIME)
+
+    def test_movetime_still_bounds_an_explicit_depth(self):
+        self.assertEqual(parse_go("go depth 3 movetime 2000"), (2.0, 3))
+
+    def test_infinite_thinks_for_the_maximum(self):
+        self.assertEqual(parse_go("go infinite")[0], MAX_MOVE_TIME)
+
+    def test_malformed_tokens_fall_back_to_defaults(self):
+        for line in ("go depth", "go depth abc", "go movetime", "go depth 0", "go movetime x"):
+            with self.subTest(line=line):
+                self.assertEqual(parse_go(line), (DEFAULT_MOVE_TIME, DEFAULT_MAX_DEPTH))
 
 
 class TestScoreFormatting(unittest.TestCase):
