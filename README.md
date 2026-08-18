@@ -27,6 +27,8 @@ Intelligent-Chess-AI/
 │   ├── knightmare.py         # Minimax Baseline Opponent
 │   ├── test_knightmare.py    # Baseline Search Unit Tests
 │   ├── test_llm_parsing.py   # Prompt Parsing Unit Tests
+│   ├── selfplay.py           # Measure Baseline Engine Changes
+│   ├── benchmark_stockfish.py # External Strength Baseline
 │   ├── tournament.py         # Multi-bot Tournament
 │   └── ...
 ├── requirements.txt          # Unified Dependencies
@@ -169,8 +171,10 @@ python test_bots.py                    # UCI protocol smoke test
 python diagnose_knight.py              # per-position search diagnostics
 
 cd ../llm_agent
-python -m unittest test_knightmare     # KnightmareFast search tests
-python -m unittest test_llm_parsing    # prompt parsing (no Ollama needed)
+python -m unittest test_knightmare          # baseline search tests
+python -m unittest test_llm_parsing         # prompt parsing (no Ollama needed)
+python -m unittest test_tournament_scoring  # tournament scoring (no chester needed)
+python -m unittest test_shared_tables       # duplicated tables still match
 ```
 These also run on every push via [GitHub Actions](.github/workflows/tests.yml).
 
@@ -210,7 +214,23 @@ random legal move if all of them fail. Both bots stop asking once the
 first legal UCI move in the text.
 
 `knightmare.py` is a plain minimax engine (no LLM) used as a strong
-baseline opponent in the tournament.
+baseline opponent in the tournament. It has the same measurement tools as
+the classic agent:
+
+```bash
+cd llm_agent
+git show HEAD~1:llm_agent/knightmare.py > /tmp/old.py
+python selfplay.py /tmp/old.py --depth 3   # did a change help?
+python benchmark_stockfish.py              # how strong is it really?
+```
+
+It scores about 17% against Stockfish limited to depth 2, against roughly
+46% for the classic agent engine, so it is clearly the weaker of the two
+despite sharing the same evaluation tables.
+
+Those tables are duplicated in both engines rather than shared, because
+the two are standalone scripts with no package between them to import
+from. `test_shared_tables.py` fails if the copies drift apart.
 
 ---
 
