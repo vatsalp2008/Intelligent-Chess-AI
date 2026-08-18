@@ -25,7 +25,7 @@ def wait_for(proc, token, timeout=5):
     return None
 
 
-def test_position(bot_path, fen, expected_different=True):
+def test_position(bot_path, fen):
     """Test if bot gives different moves for a position"""
     print(f"\nTesting position: {fen}")
     
