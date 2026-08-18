@@ -53,6 +53,10 @@ jobs:
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
 
+      - name: Run baseline engine tactics
+        working-directory: llm_agent
+        run: python tactics.py
+
       - name: Check the duplicated evaluation tables still match
         working-directory: llm_agent
         run: python -m unittest discover -p "test_shared_tables.py" -v
