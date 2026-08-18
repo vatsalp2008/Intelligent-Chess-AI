@@ -98,7 +98,7 @@ def test_bot(bot_path, test_name):
                 else:
                     print(f"✗ Invalid move: {move_uci}")
                     return False
-            except:
+            except ValueError:
                 print(f"✗ Invalid UCI format: {move_uci}")
                 return False
         else:
@@ -130,7 +130,7 @@ def test_bot(bot_path, test_name):
                 else:
                     print(f"✗ Invalid move after e4 e5: {move_uci}")
                     return False
-            except:
+            except ValueError:
                 print(f"✗ Invalid UCI format: {move_uci}")
                 return False
         else:
@@ -161,7 +161,7 @@ def test_bot(bot_path, test_name):
                 else:
                     print(f"✗ Invalid move from FEN: {move_uci}")
                     return False
-            except:
+            except ValueError:
                 print(f"✗ Invalid UCI format: {move_uci}")
                 return False
         else:
@@ -185,7 +185,8 @@ def test_bot(bot_path, test_name):
         print(f"\n❌ Error testing {test_name}: {e}")
         try:
             proc.terminate()
-        except:
+        except (OSError, UnboundLocalError):
+            # The process may never have started
             pass
         return False
 
