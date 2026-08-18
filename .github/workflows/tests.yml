@@ -53,6 +53,11 @@ jobs:
         working-directory: llm_agent
         run: python -m unittest discover -p "test_knightmare.py" -v
 
+      - name: Run LLM tournament scoring tests
+        # chester is not installed here, which the optional import allows
+        working-directory: llm_agent
+        run: python -m unittest discover -p "test_tournament_scoring.py" -v
+
       - name: Run LLM prompt parsing tests
         # These import the bots without Ollama installed, which is what the
         # optional import in those modules exists to allow.

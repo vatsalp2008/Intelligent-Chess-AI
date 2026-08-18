@@ -11,8 +11,14 @@ LLM bot needs Ollama running; the others do not.
 
 import argparse
 
-from chester.timecontrol import TimeControl
-from chester.tournament import play_tournament
+try:
+    from chester.timecontrol import TimeControl
+    from chester.tournament import play_tournament
+except ImportError:
+    # The scoring helpers are useful (and testable) without chester
+    # installed; only run_tournament actually needs it to play games.
+    TimeControl = None
+    play_tournament = None
 
 # Bots entered in the tournament, each a UCI speaking script
 PLAYERS = [
@@ -77,6 +83,12 @@ def print_table(scores, game_count):
 
 def run_tournament(games, initial_time, verbose=True):
     """Play the round robin and return the score and game count tables"""
+    if play_tournament is None:
+        raise RuntimeError(
+            "chester is not installed; install it with "
+            "'pip install -r requirements.txt' to run a tournament"
+        )
+
     time_control = TimeControl(initial_time=initial_time, increment=0)
 
     scores = {}
