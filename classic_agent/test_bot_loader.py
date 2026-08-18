@@ -14,7 +14,7 @@ import unittest
 
 import chess
 
-from bot_loader import best_move, load_bot_class, random_move
+from bot_loader import ask_engine, best_move, load_bot_class, parse_info, random_move
 
 
 class BrokenBot:
@@ -124,6 +124,79 @@ class TestBestMove(unittest.TestCase):
         board.push(chess.Move.from_uci("g8h8"))
         board.push(chess.Move.from_uci("e1e8"))
         self.assertIsNone(best_move(None, board))
+
+
+class TestParseInfo(unittest.TestCase):
+    """Reading back what the engine reported on its info lines"""
+
+    def test_a_single_info_line(self):
+        info = parse_info("info depth 4 score cp 35 nodes 100 time 5 nps 20000 pv e2e4 e7e5")
+        self.assertEqual(info["depth"], 4)
+        self.assertEqual(info["score"], "cp 35")
+        self.assertEqual(info["pv"], "e2e4 e7e5")
+
+    def test_the_deepest_line_wins(self):
+        text = (
+            "info depth 1 score cp 10 nodes 5 time 1 nps 5000 pv a2a3\n"
+            "info depth 3 score cp 40 nodes 90 time 4 nps 22500 pv e2e4 e7e5 g1f3\n"
+        )
+        self.assertEqual(parse_info(text)["depth"], 3)
+
+    def test_negative_scores(self):
+        self.assertEqual(
+            parse_info("info depth 2 score cp -120 nodes 9 time 1 nps 9000 pv d2d4")["score"],
+            "cp -120",
+        )
+
+    def test_mate_scores(self):
+        self.assertEqual(
+            parse_info("info depth 3 score mate 2 nodes 9 time 1 nps 9000 pv e1e8")["score"],
+            "mate 2",
+        )
+
+    def test_a_book_move_reports_nothing(self):
+        """Book moves and the random bot never search, so there is no info"""
+        self.assertIsNone(parse_info("info string book move e2e4"))
+
+    def test_empty_output_reports_nothing(self):
+        self.assertIsNone(parse_info(""))
+
+    def test_unrelated_output_is_ignored(self):
+        self.assertIsNone(parse_info("readyok\nbestmove e2e4\n"))
+
+
+class TestAskEngine(unittest.TestCase):
+    def setUp(self):
+        self.board = chess.Board(
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        )
+
+    def test_a_searched_move_comes_with_info(self):
+        bot = load_bot_class()()
+        move, info = ask_engine(bot, self.board, 0.4)
+        self.assertIn(move, self.board.legal_moves)
+        self.assertIsNotNone(info)
+        self.assertIn("depth", info)
+
+    def test_no_engine_gives_a_move_and_no_info(self):
+        move, info = ask_engine(None, self.board)
+        self.assertIn(move, self.board.legal_moves)
+        self.assertIsNone(info)
+
+    def test_a_broken_engine_gives_a_move_and_no_info(self):
+        move, info = ask_engine(BrokenBot(), self.board)
+        self.assertIn(move, self.board.legal_moves)
+        self.assertIsNone(info)
+
+    def test_an_illegal_move_is_replaced_and_reports_no_info(self):
+        move, info = ask_engine(IllegalMoveBot(), self.board)
+        self.assertIn(move, self.board.legal_moves)
+        self.assertIsNone(info)
+
+    def test_the_callers_board_is_still_untouched(self):
+        before = self.board.fen()
+        ask_engine(MutatingBot(), self.board)
+        self.assertEqual(self.board.fen(), before)
 
 
 if __name__ == "__main__":
