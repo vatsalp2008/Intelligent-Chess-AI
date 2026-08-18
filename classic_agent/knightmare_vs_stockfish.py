@@ -629,7 +629,9 @@ def set_stockfish_level():
             'error': f'level must be between {MIN_SKILL_LEVEL} and {MAX_SKILL_LEVEL}',
         }), 400
 
-    stockfish_level = level
+    # Under the lock so a setting cannot change halfway through a move
+    with board_lock:
+        stockfish_level = level
     return jsonify({'success': True, 'level': stockfish_level})
 
 @app.route('/set_stockfish_time', methods=['POST'])
@@ -649,13 +651,20 @@ def set_stockfish_time():
             'error': f'time must be between {MIN_THINK_TIME} and {MAX_THINK_TIME} seconds',
         }), 400
 
-    stockfish_time = think_time
+    with board_lock:
+        stockfish_time = think_time
     return jsonify({'success': True, 'time': stockfish_time})
 
 @app.route('/set_colors', methods=['POST'])
 def set_colors():
-    data = request.get_json()
-    app.config['white_is_knightmare'] = data.get('white_is_knightmare', False)
+    """Swap which engine plays White
+
+    Under the lock: changing sides mid move would have one engine finish a
+    search for a colour it no longer plays.
+    """
+    data = request.get_json(silent=True) or {}
+    with board_lock:
+        app.config['white_is_knightmare'] = bool(data.get('white_is_knightmare', False))
     return jsonify({'success': True})
 
 @app.route('/move', methods=['POST'])
