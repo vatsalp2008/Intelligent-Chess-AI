@@ -53,6 +53,7 @@ run "classic: engine loader"  classic_agent "$PYTHON" -m unittest test_bot_loade
 run "classic: tournament"     classic_agent "$PYTHON" -m unittest test_tournament
 run "classic: tuner"          classic_agent "$PYTHON" -m unittest test_tune_eval
 run "classic: selfplay harness" classic_agent "$PYTHON" -m unittest test_selfplay
+run "classic: benchmark harness" classic_agent "$PYTHON" -m unittest test_benchmark
 run "classic: tactics"        classic_agent "$PYTHON" tactics.py
 
 run "llm: baseline search"    llm_agent "$PYTHON" -m unittest test_knightmare
