@@ -24,6 +24,12 @@ useful precisely because it is fast enough to sweep a range of values.
     python3 tune_eval.py --weight ROOK_OPEN_FILE_BONUS --values 0 10 20 30 40
     python3 tune_eval.py --all --quick
 
+Conclusions depend on --depth, so it is worth checking more than one. The
+shipped BISHOP_PAIR_BONUS of 50 comes out best at both depth 2 and depth 4,
+while the tuner's original suggestion of 200 is clearly worse at depth 2 and
+merely ties at depth 4. Agreement across depths is a better signal than any
+single sweep.
+
 Needs a Stockfish binary; see requirements-dev.txt.
 """
 
@@ -65,7 +71,10 @@ POSITIONS = [
     "r1bq1rk1/ppp2ppp/2np1n2/4p1B1/Q1P1P3/3P1N2/PP3PPP/R3KB1R w KQ - 2 10",
 ]
 
-OUR_DEPTH = 3
+# Depth our engine searches while being judged. Deeper is slower but the
+# conclusions can differ, because a weight that flips a shallow choice may
+# not flip a deeper one.
+DEFAULT_OUR_DEPTH = 3
 NO_TIME_LIMIT = 600.0
 
 # Depth Stockfish is asked for its opinion at
@@ -131,7 +140,7 @@ def reference_scores(engine, positions, cache):
     return best
 
 
-def centipawn_loss(engine, positions, best, cache):
+def centipawn_loss(engine, positions, best, cache, our_depth=DEFAULT_OUR_DEPTH):
     """Total centipawns given away across the positions, lower is better"""
     loss = 0
     for fen in positions:
@@ -140,7 +149,7 @@ def centipawn_loss(engine, positions, best, cache):
         board = chess.Board(fen)
         # A fresh engine each time so no table carries over between settings
         bot = knightmare_bot.KnightmareBot()
-        move = bot.get_move(board, NO_TIME_LIMIT, OUR_DEPTH)
+        move = bot.get_move(board, NO_TIME_LIMIT, our_depth)
         if move is None or move not in board.legal_moves:
             loss += 1000  # failing to move is worse than any bad move
             continue
@@ -148,7 +157,8 @@ def centipawn_loss(engine, positions, best, cache):
     return loss
 
 
-def sweep_weight(engine, name, values, positions, best, cache, verbose=True):
+def sweep_weight(engine, name, values, positions, best, cache, verbose=True,
+                 our_depth=DEFAULT_OUR_DEPTH):
     """Try each value for one weight, returning {value: centipawn_loss}"""
     original = getattr(knightmare_bot, name)
     losses = {}
@@ -156,7 +166,7 @@ def sweep_weight(engine, name, values, positions, best, cache, verbose=True):
     try:
         for value in values:
             setattr(knightmare_bot, name, value)
-            loss = centipawn_loss(engine, positions, best, cache)
+            loss = centipawn_loss(engine, positions, best, cache, our_depth)
             losses[value] = loss
             if verbose:
                 marker = "  (current)" if value == original else ""
@@ -243,6 +253,8 @@ def parse_args():
                         help="use half the positions, for a faster rough pass")
     parser.add_argument("--sample", type=int, metavar="N",
                         help="generate N fresh positions instead of the fixed set")
+    parser.add_argument("--depth", type=int, default=DEFAULT_OUR_DEPTH,
+                        help=f"depth our engine searches (default: {DEFAULT_OUR_DEPTH})")
     return parser.parse_args()
 
 
@@ -282,7 +294,7 @@ def main():
     engine = chess.engine.SimpleEngine.popen_uci(path)
     try:
         print(f"Reference: Stockfish depth {REFERENCE_DEPTH} over "
-              f"{len(positions)} positions")
+              f"{len(positions)} positions; our engine at depth {args.depth}")
         best = reference_scores(engine, positions, cache)
 
         print("=" * 64)
@@ -292,7 +304,8 @@ def main():
             if original not in values:
                 values = sorted(set(values) | {original})
             print(f"  sweeping {name} (current {original})")
-            losses = sweep_weight(engine, name, values, positions, best, cache)
+            losses = sweep_weight(engine, name, values, positions, best, cache,
+                                  our_depth=args.depth)
             if report(name, losses, original):
                 improved.append(name)
             print("-" * 64)
