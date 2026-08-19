@@ -48,7 +48,6 @@ def default_log_path():
 class KnightmareLLMRecovery:
     def __init__(self, model_name=None, log_file=None):
         self.model_name = model_name or os.environ.get("KNIGHTMARE_MODEL", DEFAULT_MODEL)
-        self.max_retries = 3
         self.log_file = log_file or default_log_path()
         self.game_number = 0
         self.move_number = 0
