@@ -111,6 +111,39 @@ class TestRunMatchScoring(unittest.TestCase):
         _, games = self.match(lambda: ScriptedEngine(), lambda: ScriptedEngine())
         self.assertEqual(games, 2 * len(selfplay.OPENINGS))
 
+    def test_a_game_limit_stops_early(self):
+        score, games = selfplay.run_match(
+            FakeModule(lambda: ScriptedEngine()),
+            FakeModule(lambda: ScriptedEngine()),
+            depth=1, verbose=False, max_games=4,
+        )
+        self.assertEqual(games, 4)
+        self.assertEqual(score, 2.0)
+
+    def test_an_odd_game_limit_is_honoured(self):
+        _, games = selfplay.run_match(
+            FakeModule(lambda: ScriptedEngine()),
+            FakeModule(lambda: ScriptedEngine()),
+            depth=1, verbose=False, max_games=3,
+        )
+        self.assertEqual(games, 3)
+
+    def test_no_limit_plays_everything(self):
+        _, games = selfplay.run_match(
+            FakeModule(lambda: ScriptedEngine()),
+            FakeModule(lambda: ScriptedEngine()),
+            depth=1, verbose=False, max_games=None,
+        )
+        self.assertEqual(games, 2 * len(selfplay.OPENINGS))
+
+    def test_a_limit_beyond_the_openings_is_harmless(self):
+        _, games = selfplay.run_match(
+            FakeModule(lambda: ScriptedEngine()),
+            FakeModule(lambda: ScriptedEngine()),
+            depth=1, verbose=False, max_games=1000,
+        )
+        self.assertEqual(games, 2 * len(selfplay.OPENINGS))
+
     def test_scores_never_exceed_the_games_played(self):
         score, games = self.match(
             lambda: ScriptedEngine(), lambda: ScriptedEngine(resign_after=1)
