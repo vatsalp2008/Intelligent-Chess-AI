@@ -3,8 +3,9 @@
 # Run every test suite in the project.
 #
 # The suites live in two directories and have different dependencies, so
-# running them by hand means remembering ten commands and which ones need
-# Flask or Stockfish. This runs what it can and says what it skipped.
+# running them by hand means remembering twenty-odd commands and which ones
+# need Flask, matplotlib or networkx. This runs what it can and reports what
+# it skipped rather than failing on a missing optional package.
 #
 #   ./run_tests.sh            # everything available
 #   ./run_tests.sh --quick    # skip the slow end-to-end checks
@@ -20,6 +21,10 @@ failed=0
 skipped=0
 failures=""
 
+# A private scratch file, so two runs at once cannot clobber each other
+OUTPUT="$(mktemp -t run_tests)"
+trap 'rm -f "$OUTPUT"' EXIT
+
 have_module() {
     "$PYTHON" -c "import $1" >/dev/null 2>&1
 }
@@ -28,13 +33,13 @@ run() {
     local name="$1" dir="$2"
     shift 2
     printf '%-34s ' "$name"
-    if ( cd "$dir" && "$@" ) >/tmp/run_tests_out 2>&1; then
+    if ( cd "$dir" && "$@" ) >"$OUTPUT" 2>&1; then
         echo "ok"
         passed=$((passed + 1))
     else
         echo "FAILED"
         failed=$((failed + 1))
-        failures="${failures}\n  $name\n$(tail -15 /tmp/run_tests_out | sed 's/^/    /')"
+        failures="${failures}\n  $name\n$(tail -15 "$OUTPUT" | sed 's/^/    /')"
     fi
 }
 
