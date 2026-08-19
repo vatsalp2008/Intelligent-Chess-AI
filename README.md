@@ -10,30 +10,37 @@ This project merges two distinct approaches to computer chess:
 
 ```
 Intelligent-Chess-AI/
-├── classic_agent/            # Knightmare Engine & Web UI
-│   ├── knightmare_bot.py     # Core Minimax Logic
-│   ├── simple_web_chess.py   # Web Interface
-│   ├── simple_tournament.py  # Tournament Runner (PGN output)
-│   ├── test_evaluation.py    # Evaluation & Search Unit Tests
-│   ├── test_search_safety.py # Legal-move Regression Tests
-│   ├── selfplay.py           # Measure a Change Against a Saved Engine
-│   ├── benchmark_stockfish.py # External Strength Baseline
-│   ├── tactics.py            # Positions With a Known Best Move
-│   ├── bot_loader.py         # Shared Engine Loading for the Web UIs
-│   ├── test_bots.py          # UCI Protocol Smoke Test
-│   └── ...
-├── llm_agent/                # LLM-based Bots (Ollama)
-│   ├── knightmare_llm.py     # LLM Bot Logic
-│   ├── knightmare.py         # Minimax Baseline Opponent
-│   ├── test_knightmare.py    # Baseline Search Unit Tests
-│   ├── test_llm_parsing.py   # Prompt Parsing Unit Tests
-│   ├── selfplay.py           # Measure Baseline Engine Changes
-│   ├── benchmark_stockfish.py # External Strength Baseline
-│   ├── tournament.py         # Multi-bot Tournament
-│   └── ...
-├── requirements.txt          # Unified Dependencies
-├── requirements-dev.txt      # Just what the tests need
-└── README.md                 # Documentation
+├── classic_agent/              # Knightmare Engine & Web UI
+│   ├── knightmare_bot.py       # Core Minimax Logic
+│   ├── bot_loader.py           # Shared Engine Loading for the Web UIs
+│   ├── simple_web_chess.py     # Web Interface (vs Random)
+│   ├── knightmare_vs_stockfish.py  # Web Interface (vs Stockfish)
+│   ├── simple_tournament.py    # Tournament Runner (PGN output)
+│   ├── standalone_tree_viz.py  # Minimax Tree Figures
+│   ├── diagnose_knight.py      # Per-position Search Diagnostics
+│   ├── selfplay.py             # Measure a Change Against a Saved Engine
+│   ├── benchmark_stockfish.py  # External Strength Baseline
+│   ├── tune_eval.py            # Sweep Evaluation Weights
+│   ├── tactics.py              # Positions With a Known Best Move
+│   ├── test_bots.py            # UCI Protocol Smoke Test
+│   └── test_*.py               # Unit Suites
+├── llm_agent/                  # LLM-based Bots (Ollama)
+│   ├── knightmare_llm.py       # LLM Bot (llama3.2)
+│   ├── knightmare_llm_mistral.py   # LLM Bot With Recovery Strategies
+│   ├── knightmare.py           # Minimax Baseline Opponent
+│   ├── random_chess_bot.py     # Random Baseline
+│   ├── mate_in_one.py          # Mate-in-one Baseline
+│   ├── generator.py            # Game Tree Generator
+│   ├── tournament.py           # Multi-bot Tournament
+│   ├── selfplay.py             # Measure Baseline Engine Changes
+│   ├── benchmark_stockfish.py  # External Strength Baseline
+│   ├── tactics.py              # Positions With a Known Best Move
+│   ├── REPORT.md               # Coursework Writeup
+│   └── test_*.py               # Unit Suites
+├── run_tests.sh                # Run Every Suite
+├── requirements.txt            # Unified Dependencies
+├── requirements-dev.txt        # Just What the Tests Need
+└── README.md                   # Documentation
 ```
 
 ## 🚀 Quick Start
