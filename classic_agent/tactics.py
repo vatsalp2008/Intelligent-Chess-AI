@@ -2,6 +2,10 @@
 """
 Run the engine over positions with a known best move.
 
+The position list is shared with llm_agent/tactics.py by copy, because the
+two engines are standalone scripts with no package between them. If a
+position or expectation changes here, change it there too.
+
 A match result says the engine is weaker or stronger; it does not say what
 it is getting wrong. These positions each have one clearly correct move,
 so a failure points at a specific gap: a missed mate, a hanging piece, a

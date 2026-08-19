@@ -2,6 +2,10 @@
 """
 Run the baseline engine over positions with a known best move.
 
+The position list is shared with classic_agent/tactics.py by copy, because
+the two engines are standalone scripts with no package between them. If a
+position or expectation changes here, change it there too.
+
 A match result says the engine is weaker or stronger; it does not say what
 it is getting wrong. These positions each have one clearly correct move,
 so a failure points at a specific gap: a missed mate, a hanging piece, a
@@ -68,9 +72,13 @@ POSITIONS = [
 ]
 
 # Moves the engine must never play in these positions
+#
+# The stalemate case is not listed here: the check below plays the move and
+# asks the board whether it is stalemate, which is correct by construction.
+# This list previously named f7f8 as one to avoid, which was simply wrong:
+# f7f8 gives check, and only f7g6 stalemates.
 FORBIDDEN = {
     "do not take defended pawn": ["d1d5"],
-    "avoid stalemate when winning": ["f7g6", "f7f8"],
     "decline defended rook": ["d1d8"],
 }
 
