@@ -116,6 +116,26 @@ class TestExampleTrees(unittest.TestCase):
     def test_the_generic_tree_is_acyclic(self):
         self.assertTrue(nx.is_directed_acyclic_graph(generator.genericGameTree()))
 
+    def test_too_few_payoffs_is_a_clear_error(self):
+        """Previously this raised an opaque IndexError partway through"""
+        with self.assertRaises(ValueError) as caught:
+            generator.genericGameTree([1, 2, 3])
+        self.assertIn("payoffs", str(caught.exception))
+
+    def test_the_default_payoffs_are_not_modified_by_a_call(self):
+        """They live at module level, so a call must not disturb them"""
+        before = list(generator.BERKELEY_PAYOFFS)
+        generator.genericGameTree()
+        self.assertEqual(generator.BERKELEY_PAYOFFS, before)
+
+    def test_extra_payoffs_are_ignored_rather_than_rejected(self):
+        graph = generator.genericGameTree(list(range(1, 40)))
+        assigned = [
+            graph.nodes[n]["utility"] for n in graph.nodes()
+            if graph.nodes[n]["utility"] is not None
+        ]
+        self.assertEqual(len(assigned), 12)
+
 
 if __name__ == "__main__":
     unittest.main()
