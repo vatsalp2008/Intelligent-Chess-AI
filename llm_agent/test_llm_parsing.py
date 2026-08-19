@@ -128,6 +128,43 @@ class TestRecoveryParsing(unittest.TestCase):
         self.assertIsNone(move)
         self.assertIsNotNone(error)
 
+    def test_dashed_move_mid_sentence(self):
+        """Models often write e2-e4, and not always as the first word"""
+        for text in ("I will play e2-e4", "My move: e2-e4 looks best"):
+            with self.subTest(text=text):
+                move, error = self.parse(text)
+                self.assertEqual(move, chess.Move.from_uci("e2e4"))
+                self.assertIsNone(error)
+
+    def test_dashed_move_as_the_first_token(self):
+        move, _ = self.parse("e2-e4")
+        self.assertEqual(move, chess.Move.from_uci("e2e4"))
+
+    def test_first_legal_move_in_the_text_wins(self):
+        move, _ = self.parse("d2d4 or perhaps e2e4")
+        self.assertEqual(move, chess.Move.from_uci("d2d4"))
+
+    def test_an_illegal_candidate_does_not_stop_the_scan(self):
+        move, _ = self.parse("a1a8 no wait d2d4")
+        self.assertEqual(move, chess.Move.from_uci("d2d4"))
+
+    def test_every_legal_move_is_reachable_by_the_pattern(self):
+        """The removed third strategy relied on this being false
+
+        It searched for each legal move as a substring, which could never
+        find anything the pattern above had not already found.
+        """
+        from knightmare_llm_mistral import UCI_PATTERN
+        for move in self.legal:
+            with self.subTest(move=move.uci()):
+                self.assertTrue(UCI_PATTERN.fullmatch(move.uci()))
+
+    def test_promotions_are_understood(self):
+        board = chess.Board("4k3/P7/8/8/8/8/8/4K3 w - - 0 1")
+        legal = list(board.legal_moves)
+        move, _ = self.bot.parse_move_with_recovery("I play a7a8q", legal)
+        self.assertEqual(move, chess.Move.from_uci("a7a8q"))
+
 
 class TestLogPath(unittest.TestCase):
     def test_default_is_a_relative_jsonl_file(self):
