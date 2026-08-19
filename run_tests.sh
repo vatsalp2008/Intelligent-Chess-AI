@@ -57,6 +57,7 @@ run "classic: tactics"        classic_agent "$PYTHON" tactics.py
 run "llm: baseline search"    llm_agent "$PYTHON" -m unittest test_knightmare
 run "llm: prompt parsing"     llm_agent "$PYTHON" -m unittest test_llm_parsing
 run "llm: recovery escalation" llm_agent "$PYTHON" -m unittest test_llm_recovery
+run "llm: retry loop"         llm_agent "$PYTHON" -m unittest test_llm_retry
 run "llm: tournament scoring" llm_agent "$PYTHON" -m unittest test_tournament_scoring
 run "llm: shared tables"      llm_agent "$PYTHON" -m unittest test_shared_tables
 run "llm: tactics"            llm_agent "$PYTHON" tactics.py
