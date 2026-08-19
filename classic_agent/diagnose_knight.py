@@ -4,25 +4,51 @@ Diagnostic script to find why Knightmare keeps repeating moves
 """
 
 import chess
+import queue
 import subprocess
+import threading
 import time
 
-def wait_for(proc, token, timeout=5):
-    """Read until token appears, giving up on EOF or timeout
 
-    A dead engine leaves readline() returning '' forever, so bail out
-    rather than spinning.
+def start_reader(proc):
+    """Pump the engine's output into a queue on a background thread
+
+    readline() blocks until a newline arrives, so an engine that is running
+    but silent would hang this script indefinitely. Reading on a separate
+    thread lets the caller apply a real timeout.
     """
+    lines = queue.Queue()
+
+    def pump():
+        for line in proc.stdout:
+            lines.put(line)
+        lines.put(None)  # sentinel: the engine closed its output
+
+    threading.Thread(target=pump, daemon=True).start()
+    return lines
+
+
+def read_line(lines, deadline):
+    """One line of output, or None on timeout or end of file"""
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        return None
+    try:
+        return lines.get(timeout=remaining)
+    except queue.Empty:
+        return None
+
+
+def wait_for(lines, token, timeout=5):
+    """Read until token appears, giving up on EOF or timeout"""
     deadline = time.time() + timeout
 
-    while time.time() < deadline:
-        line = proc.stdout.readline()
-        if line == "":  # pipe closed, the engine is gone
+    while True:
+        line = read_line(lines, deadline)
+        if line is None:
             return None
         if token in line:
             return line
-
-    return None
 
 
 def test_position(bot_path, fen):
@@ -38,20 +64,21 @@ def test_position(bot_path, fen):
         bufsize=0
     )
     
+    lines = start_reader(proc)
+
     # Initialize
     proc.stdin.write("uci\n")
     proc.stdin.flush()
-    time.sleep(0.5)
-    
+
     # Wait for uciok
-    if wait_for(proc, "uciok") is None:
+    if wait_for(lines, "uciok") is None:
         print("  ✗ Engine never answered 'uci' - is it crashing on startup?")
         proc.kill()
         return []
 
     proc.stdin.write("isready\n")
     proc.stdin.flush()
-    if wait_for(proc, "readyok") is None:
+    if wait_for(lines, "readyok") is None:
         print("  ✗ Engine never answered 'isready'")
         proc.kill()
         return []
@@ -71,11 +98,12 @@ def test_position(bot_path, fen):
         proc.stdin.flush()
         
         # Get response
-        start = time.time()
-        while time.time() - start < 2:
-            raw = proc.stdout.readline()
-            if raw == "":  # engine exited mid-test
-                print(f"  ✗ Engine exited during attempt {i+1}")
+        deadline = time.time() + 2
+        while True:
+            raw = read_line(lines, deadline)
+            if raw is None:
+                # Timed out or the engine closed its output
+                print(f"  ✗ No answer from the engine on attempt {i+1}")
                 break
             line = raw.strip()
             if line.startswith("info"):
