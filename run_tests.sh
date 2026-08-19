@@ -54,6 +54,7 @@ run "classic: tournament"     classic_agent "$PYTHON" -m unittest test_tournamen
 run "classic: tuner"          classic_agent "$PYTHON" -m unittest test_tune_eval
 run "classic: selfplay harness" classic_agent "$PYTHON" -m unittest test_selfplay
 run "classic: benchmark harness" classic_agent "$PYTHON" -m unittest test_benchmark
+run "classic: diagnostics"     classic_agent "$PYTHON" -m unittest test_diagnose
 run "classic: tactics"        classic_agent "$PYTHON" tactics.py
 
 run "llm: baseline search"    llm_agent "$PYTHON" -m unittest test_knightmare
