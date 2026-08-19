@@ -89,13 +89,21 @@ def play_game(white_bot, black_bot, opening, depth, seconds=None, max_plies=160)
     return "1/2-1/2"
 
 
-def run_match(new_module, old_module, depth, seconds=None, verbose=True):
-    """Play every opening from both sides, returning (new_score, games)"""
+def run_match(new_module, old_module, depth, seconds=None, verbose=True,
+              max_games=None):
+    """Play openings from both sides, returning (new_score, games)
+
+    max_games stops early, which is useful when a full match is too slow to
+    sit through. Colours still alternate, so an odd limit leaves one opening
+    played from one side only.
+    """
     new_score = 0.0
     games = 0
 
     for name, opening in OPENINGS:
         for new_is_white in (True, False):
+            if max_games is not None and games >= max_games:
+                return new_score, games
             games += 1
             new_bot = new_module.KnightmareBot()
             old_bot = old_module.KnightmareBot()
@@ -131,6 +139,8 @@ def parse_args():
                         help="fixed search depth for both sides (default: 3)")
     parser.add_argument("--seconds", type=float, default=None, metavar="S",
                         help="give each side S seconds per move instead of a fixed depth")
+    parser.add_argument("--games", type=int, default=None, metavar="N",
+                        help="stop after N games instead of playing them all")
     parser.add_argument("--quiet", action="store_true", help="only print the final score")
     return parser.parse_args()
 
@@ -149,7 +159,8 @@ def main():
     print("=" * 60)
 
     score, games = run_match(new_module, old_module, args.depth,
-                             seconds=args.seconds, verbose=not args.quiet)
+                             seconds=args.seconds, verbose=not args.quiet,
+                             max_games=args.games)
 
     print("=" * 60)
     percent = 100 * score / games
