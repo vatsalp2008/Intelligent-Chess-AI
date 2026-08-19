@@ -152,6 +152,20 @@ the threshold now rejects it as well.
 `--sample N` generates positions from played games instead of using the
 fixed set, which gives a steadier signal at the cost of a slower sweep.
 
+### Things tried that did not survive measurement
+
+Keeping these on record saves re-deriving them:
+
+| Change | Result |
+| :--- | :--- |
+| Tapered evaluation (phase-blended king tables) | 40% — diluted the king's shelter while queens were on |
+| Aspiration windows | 0% node saving once a transposition table bug was fixed; the apparent 41% gain had come from that bug |
+| Late move reductions | 51-71% fewer nodes, but 40% at depth 4 (45% with a conservative setting). Buys speed by accepting less accuracy, and the speed did not pay it back at these depths |
+| `ISOLATED_PAWN_PENALTY` 150 | Looked 2% better to the tuner, scored 27% in a match |
+
+Two parameters were checked and left alone: `QUIESCENCE_DEPTH` 4 beat both 2
+and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3.
+
 ### Time control
 
 `go` understands `movetime`, `depth`, `infinite`, and the usual
