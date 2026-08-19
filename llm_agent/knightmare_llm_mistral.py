@@ -160,21 +160,22 @@ Reply with just the move (like e2e4)."""
             except ValueError:
                 pass
         
-        # Strategy 2: Look for 4-5 character sequences
-        for match in UCI_PATTERN.findall(llm_output.lower()):
+        # Strategy 2: scan the whole reply for a UCI move, in the order the
+        # moves appear in the text. Dashes are stripped first because models
+        # often write e2-e4, and the pattern needs the squares adjacent.
+        #
+        # There used to be a third strategy here that looked for each legal
+        # move as a substring. It could never fire: every legal move's UCI
+        # form matches this pattern, so anything it would have found was
+        # already found above.
+        for match in UCI_PATTERN.findall(llm_output.lower().replace('-', '')):
             try:
                 move = chess.Move.from_uci(match)
                 if move in legal_moves:
                     return move, None
             except ValueError:
                 pass
-        
-        # Strategy 3: Check if any legal move is mentioned
-        for move in legal_moves:
-            move_str = str(move)
-            if move_str in llm_output.lower():
-                return move, None
-        
+
         return None, f"Could not parse: {llm_output[:50]}"
     
     def get_best_move(self, board, max_time=2.0):
