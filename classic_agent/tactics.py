@@ -68,9 +68,13 @@ POSITIONS = [
 ]
 
 # Moves the engine must never play in these positions
+#
+# The stalemate case is not listed here: the check below plays the move and
+# asks the board whether it is stalemate, which is correct by construction.
+# This list previously named f7f8 as one to avoid, which was simply wrong:
+# f7f8 gives check, and only f7g6 stalemates.
 FORBIDDEN = {
     "do not take defended pawn": ["d1d5"],
-    "avoid stalemate when winning": ["f7g6", "f7f8"],
     "decline defended rook": ["d1d8"],
 }
 
