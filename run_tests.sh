@@ -21,8 +21,15 @@ failed=0
 skipped=0
 failures=""
 
-# A private scratch file, so two runs at once cannot clobber each other
-OUTPUT="$(mktemp -t run_tests)"
+# A private scratch file, so two runs at once cannot clobber each other.
+# The template needs the X's spelled out: GNU mktemp rejects "-t name"
+# without them, which silently left this empty on Linux and broke every
+# suite while passing on macOS.
+OUTPUT="$(mktemp "${TMPDIR:-/tmp}/run_tests.XXXXXX")"
+if [ -z "$OUTPUT" ]; then
+    echo "could not create a scratch file" >&2
+    exit 1
+fi
 trap 'rm -f "$OUTPUT"' EXIT
 
 have_module() {
