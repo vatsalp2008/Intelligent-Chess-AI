@@ -221,7 +221,22 @@ That is also what CI runs, so there is one list of suites rather than two.
 Suites needing a package that is not installed are reported as skipped
 rather than failing.
 
-Or individually. Only `chess` is needed for most of them:
+There are 23 suites. Most need only `chess`; the ones covering the web
+interfaces need Flask, the visualiser needs matplotlib and the game tree
+generator needs networkx. Missing an optional package skips that suite
+rather than failing the run.
+
+What is covered, beyond the engines themselves:
+
+| Area | Why it is tested |
+| :--- | :--- |
+| Measurement harnesses | Every strength claim comes out of `selfplay.py` and `benchmark_stockfish.py`. A colour attribution bug there would quietly invalidate all of them, so the scoring is tested directly, including that identical engines score 50%. |
+| Engine process handling | The tournament runner and the diagnostic both drive engines as subprocesses. The interesting cases are engines that die, engines that go silent, and shutdown running twice. |
+| Web concurrency | Overlapping requests used to produce impossible games. The test fires six concurrent moves and checks the result still replays as legal chess. |
+| LLM control flow | The retry loop and the four-strategy escalation are driven with a stubbed model, so no Ollama server is needed. |
+| Duplicated data | The evaluation tables exist in both engines; a test fails if the copies drift. |
+
+Or individually:
 ```bash
 pip install -r requirements-dev.txt
 
