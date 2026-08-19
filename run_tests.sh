@@ -64,6 +64,13 @@ run "llm: tournament scoring" llm_agent "$PYTHON" -m unittest test_tournament_sc
 run "llm: shared tables"      llm_agent "$PYTHON" -m unittest test_shared_tables
 run "llm: tactics"            llm_agent "$PYTHON" tactics.py
 
+# The generator tests need networkx, which the minimal install omits
+if have_module networkx; then
+    run "llm: game tree generator" llm_agent "$PYTHON" -m unittest test_generator
+else
+    skip "llm: game tree generator" "networkx not installed"
+fi
+
 # The visualiser tests need matplotlib, which the minimal install omits
 if have_module matplotlib; then
     run "classic: tree visualiser" classic_agent "$PYTHON" -m unittest test_tree_viz
