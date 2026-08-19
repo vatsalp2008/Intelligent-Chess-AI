@@ -96,7 +96,11 @@ BOOK_MAX_FULLMOVES = 5
 # Shallowest depth at which a null move search is worth trying
 NULL_MOVE_MIN_DEPTH = 4
 
-# Plies shaved off the null move search, since it only needs to be a probe
+# Plies shaved off the null move search, since it only needs to be a probe.
+# Measured over three middlegame positions at depth 5: 2 was fastest every
+# time, with the same move chosen throughout. A reduction of 1 searches the
+# probe too deeply; 3 makes it too shallow to prove the cutoff, so the real
+# search happens anyway.
 NULL_MOVE_REDUCTION = 2
 
 # The best move from a previous search of this position, tried before all else
