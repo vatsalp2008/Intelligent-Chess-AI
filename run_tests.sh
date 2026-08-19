@@ -63,6 +63,13 @@ run "llm: tournament scoring" llm_agent "$PYTHON" -m unittest test_tournament_sc
 run "llm: shared tables"      llm_agent "$PYTHON" -m unittest test_shared_tables
 run "llm: tactics"            llm_agent "$PYTHON" tactics.py
 
+# The visualiser tests need matplotlib, which the minimal install omits
+if have_module matplotlib; then
+    run "classic: tree visualiser" classic_agent "$PYTHON" -m unittest test_tree_viz
+else
+    skip "classic: tree visualiser" "matplotlib not installed"
+fi
+
 # The web tests drive Flask, which the minimal install does not include
 if have_module flask; then
     run "classic: web concurrency" classic_agent "$PYTHON" -m unittest test_web_concurrency
