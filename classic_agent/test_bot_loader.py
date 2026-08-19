@@ -75,6 +75,16 @@ class TestLoadBotClass(unittest.TestCase):
     def test_missing_module_returns_none(self):
         self.assertIsNone(load_bot_class("definitely_not_a_module_here"))
 
+    def test_repeated_calls_do_not_grow_sys_path(self):
+        """It used to insert the directory on every call"""
+        import sys
+
+        load_bot_class()
+        before = len(sys.path)
+        for _ in range(20):
+            load_bot_class()
+        self.assertEqual(len(sys.path), before)
+
 
 class TestRandomMove(unittest.TestCase):
     def test_returns_a_legal_move(self):

@@ -31,7 +31,11 @@ def load_bot_class(module_name="knightmare_bot"):
     The class is found by name rather than imported directly so that
     renaming it in the engine does not break the web interfaces.
     """
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    # Only add the directory once: this used to insert on every call, so a
+    # process that asked repeatedly grew sys.path without bound
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
 
     try:
         module = __import__(module_name)
