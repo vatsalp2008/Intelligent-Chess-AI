@@ -48,10 +48,22 @@ def exampleGameTree():
     H.nodes['d3']['utility'] = (2, -2)
     return H
 
-def genericGameTree(p = [2,3,4,5,1,2,6,10,8,1,9,3]):
+# Leaf payoffs for the Berkeley example tree, in the order the leaves are
+# visited. Kept at module level rather than as a default argument: a mutable
+# default is shared by every call, so any future edit that changed it in
+# place would silently alter the example for everyone.
+BERKELEY_PAYOFFS = [2, 3, 4, 5, 1, 2, 6, 10, 8, 1, 9, 3]
+
+
+def genericGameTree(p=None):
     """
     Create a game tree for the Berkeley examples
+
+    @param p - [optional] leaf payoffs, one per leaf; defaults to the
+               Berkeley example values
     """
+    if p is None:
+        p = BERKELEY_PAYOFFS
     G = nx.full_rary_tree(2,15,nx.DiGraph)
     H = nx.full_rary_tree(2,7,nx.DiGraph)
     mapping = {x:x+16 for x in range(7)}
@@ -65,6 +77,10 @@ def genericGameTree(p = [2,3,4,5,1,2,6,10,8,1,9,3]):
     attrs = {i: {"utility": None} for i in range(len(n))}
     nx.set_node_attributes(G, attrs)
     indexes = [3,4,6,7,10,11,13,14,17,18,20,21]
+    if len(p) < len(indexes):
+        raise ValueError(
+            f"need {len(indexes)} payoffs for this tree, got {len(p)}"
+        )
     for i in range(len(indexes)):
         G.nodes[indexes[i]]['utility'] = (p[i], -p[i])
     return G
