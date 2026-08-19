@@ -25,10 +25,6 @@ INFO_LINE = re.compile(
     r".*?(?: pv (?P<pv>.*))?$"
 )
 
-# Fall back to this if the engine cannot be loaded at all
-FALLBACK_NOTE = "engine unavailable, playing randomly"
-
-
 def load_bot_class(module_name="knightmare_bot"):
     """Return the engine class from the given module, or None
 
