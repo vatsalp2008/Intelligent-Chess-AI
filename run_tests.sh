@@ -62,6 +62,7 @@ run "llm: prompt parsing"     llm_agent "$PYTHON" -m unittest test_llm_parsing
 run "llm: recovery escalation" llm_agent "$PYTHON" -m unittest test_llm_recovery
 run "llm: retry loop"         llm_agent "$PYTHON" -m unittest test_llm_retry
 run "llm: selfplay harness"   llm_agent "$PYTHON" -m unittest test_selfplay
+run "llm: benchmark harness"  llm_agent "$PYTHON" -m unittest test_benchmark
 run "llm: tournament scoring" llm_agent "$PYTHON" -m unittest test_tournament_scoring
 run "llm: shared tables"      llm_agent "$PYTHON" -m unittest test_shared_tables
 run "llm: tactics"            llm_agent "$PYTHON" tactics.py
