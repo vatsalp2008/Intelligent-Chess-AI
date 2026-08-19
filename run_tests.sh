@@ -83,8 +83,10 @@ fi
 # The web tests drive Flask, which the minimal install does not include
 if have_module flask; then
     run "classic: web concurrency" classic_agent "$PYTHON" -m unittest test_web_concurrency
+    run "classic: web settings"    classic_agent "$PYTHON" -m unittest test_web_settings
 else
     skip "classic: web concurrency" "flask not installed"
+    skip "classic: web settings" "flask not installed"
 fi
 
 # Slower end-to-end checks that start real subprocesses
