@@ -6,7 +6,6 @@ Works directly with the Knightmare bot code without UCI
 
 from flask import Flask, Response, render_template_string, jsonify, request
 import argparse
-import datetime
 import threading
 
 import chess
@@ -20,7 +19,7 @@ DEFAULT_PORT = 5001
 # Seconds the engine may think about each move
 THINK_SECONDS = 1.0
 
-from bot_loader import ask_engine, load_bot_class, random_move
+from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
 
 bot_class = load_bot_class()
 
@@ -668,55 +667,6 @@ def human_move():
         move_history.append(f"You: {san}")
 
     return jsonify({'success': True, 'san': san})
-
-
-def game_pgn(board, white, black):
-    """The game so far as PGN
-
-    Written out by hand rather than through chess.pgn, so that the only
-    dependency stays python-chess itself and the headers can name whoever
-    actually played. A game loaded from a FEN records that FEN, since the
-    moves alone would not reproduce the position.
-    """
-    start = board.root()
-    headers = [
-        ('Event', 'Knightmare web interface'),
-        ('Site', 'local'),
-        ('Date', datetime.date.today().strftime('%Y.%m.%d')),
-        ('White', white),
-        ('Black', black),
-        ('Result', board.result(claim_draw=True)),
-    ]
-    if start.fen() != chess.STARTING_FEN:
-        headers.extend([('SetUp', '1'), ('FEN', start.fen())])
-
-    lines = [f'[{key} "{value}"]' for key, value in headers]
-    lines.append('')
-
-    # Replay from the root so each move can be named the way a player
-    # would write it, which depends on the position it is played from
-    scratch = start.copy(stack=False)
-    text = []
-    for move in board.move_stack:
-        if scratch.turn == chess.WHITE:
-            text.append(f'{scratch.fullmove_number}.')
-        text.append(scratch.san(move))
-        scratch.push(move)
-    text.append(board.result(claim_draw=True))
-
-    # Wrapped at 80 columns, as the PGN standard asks for
-    wrapped = []
-    row = ''
-    for token in text:
-        if row and len(row) + 1 + len(token) > 80:
-            wrapped.append(row)
-            row = token
-        else:
-            row = f'{row} {token}'.strip()
-    if row:
-        wrapped.append(row)
-
-    return '\n'.join(lines + wrapped) + '\n'
 
 
 @app.route('/pgn')

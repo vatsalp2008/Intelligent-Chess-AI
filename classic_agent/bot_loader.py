@@ -6,9 +6,14 @@ Both Flask apps used to carry identical copies of this: find whatever
 Knightmare class lives in knightmare_bot.py, then work out which method to
 call on it. Keeping one copy means a change to the engine's interface only
 has to be handled in one place.
+
+Writing the game out as PGN lives here for the same reason: both
+interfaces play a game worth saving, and the format has enough small rules
+to be worth getting right once.
 """
 
 import contextlib
+import datetime
 import io
 import os
 import random
@@ -167,3 +172,52 @@ def best_move(bot, board, seconds=1.0):
     """Ask the engine for a move, falling back to a random legal one"""
     move, _ = ask_engine(bot, board, seconds)
     return move
+
+
+def game_pgn(board, white, black):
+    """The game so far as PGN
+
+    Written out by hand rather than through chess.pgn, so that the only
+    dependency stays python-chess itself and the headers can name whoever
+    actually played. A game loaded from a FEN records that FEN, since the
+    moves alone would not reproduce the position.
+    """
+    start = board.root()
+    headers = [
+        ('Event', 'Knightmare web interface'),
+        ('Site', 'local'),
+        ('Date', datetime.date.today().strftime('%Y.%m.%d')),
+        ('White', white),
+        ('Black', black),
+        ('Result', board.result(claim_draw=True)),
+    ]
+    if start.fen() != chess.STARTING_FEN:
+        headers.extend([('SetUp', '1'), ('FEN', start.fen())])
+
+    lines = [f'[{key} "{value}"]' for key, value in headers]
+    lines.append('')
+
+    # Replay from the root so each move can be named the way a player
+    # would write it, which depends on the position it is played from
+    scratch = start.copy(stack=False)
+    text = []
+    for move in board.move_stack:
+        if scratch.turn == chess.WHITE:
+            text.append(f'{scratch.fullmove_number}.')
+        text.append(scratch.san(move))
+        scratch.push(move)
+    text.append(board.result(claim_draw=True))
+
+    # Wrapped at 80 columns, as the PGN standard asks for
+    wrapped = []
+    row = ''
+    for token in text:
+        if row and len(row) + 1 + len(token) > 80:
+            wrapped.append(row)
+            row = token
+        else:
+            row = f'{row} {token}'.strip()
+    if row:
+        wrapped.append(row)
+
+    return '\n'.join(lines + wrapped) + '\n'
