@@ -180,6 +180,30 @@ and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3.
 the engine spends roughly one thirtieth of the time remaining plus most of
 the increment, and never more than 40% of what is left.
 
+Iterative deepening decides whether to start the next depth by predicting
+its cost from how long the last one took. That prediction is a guess, and
+when it is wrong the search used to run to the end of the iteration
+regardless: the baseline engine was measured taking 28 seconds for a one
+second budget. The search now also carries a hard deadline, checked every
+few thousand nodes, and abandons the iteration when it passes.
+
+Abandoning an iteration throws work away, so a root move that has already
+been searched to the new depth is kept rather than discarded — it is a
+better answer than the whole of the previous, shallower depth. Measured
+overshoot after the change, over a range of budgets and positions:
+
+| Engine   | Worst overshoot before | After |
+| -------- | ---------------------- | ----- |
+| Classic  | unbounded (1.3x seen)  | 1.4x  |
+| Baseline | unbounded (28x seen)   | 1.2x  |
+
+What remains is the fixed cost of the mate scan that runs before any
+searching, plus up to one clock-check interval. At a fixed depth, where
+the deadline never fires, self play shows no change in strength (54% over
+24 games). At a fixed time it scores slightly lower, which is the point:
+the old engine was winning those games by using more time than it was
+given.
+
 ### Usage
 
 **Web Interface (vs Random)**
