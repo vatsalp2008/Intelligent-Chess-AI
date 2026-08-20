@@ -12,8 +12,8 @@ This project merges two distinct approaches to computer chess:
 Intelligent-Chess-AI/
 ├── classic_agent/              # Knightmare Engine & Web UI
 │   ├── knightmare_bot.py       # Core Minimax Logic
-│   ├── bot_loader.py           # Shared Engine Loading for the Web UIs
-│   ├── simple_web_chess.py     # Web Interface (vs Random)
+│   ├── bot_loader.py           # Shared Engine Loading and PGN Output
+│   ├── simple_web_chess.py     # Web Interface (Play, or Watch vs Random)
 │   ├── knightmare_vs_stockfish.py  # Web Interface (vs Stockfish)
 │   ├── simple_tournament.py    # Tournament Runner (PGN output)
 │   ├── standalone_tree_viz.py  # Minimax Tree Figures
@@ -214,6 +214,18 @@ cd classic_agent
 python simple_web_chess.py                  # http://127.0.0.1:5001
 python simple_web_chess.py --port 8080      # pick another port
 ```
+
+The interface opens in Watch mode, where the random bot and Knightmare play
+each other. **Mode** switches to playing Knightmare yourself, as White:
+click a piece to see where it can go, then click a square to move there.
+Switching mode starts a new game, since carrying a half-played position
+across would leave the side you just took over having already moved.
+
+**Take Back** unwinds a whole move pair rather than a single move, because
+undoing only your own would just let the engine play again. **Save PGN**
+downloads the game, and pasting a FEN into the box below sets the board up
+from that position — useful for practising an endgame the opening never
+reaches. An illegal position is refused with the reason.
 
 Both interfaces show what the engine thought about its last move: the depth
 it reached, the score in pawns, and the line it expected, in algebraic
