@@ -149,6 +149,81 @@ class TestEngineReply(PlayTestCase):
         self.assertEqual(len(web.move_history), 4)
 
 
+class TestTakeback(PlayTestCase):
+    def setUp(self):
+        super().setUp()
+        self.play()
+
+    def pair(self, uci):
+        """Your move and the engine's reply to it"""
+        self.send(uci)
+        self.client.post('/move')
+
+    def test_it_undoes_a_whole_move_pair(self):
+        """Undoing only your move would just let the engine play again"""
+        self.pair('e2e4')
+        self.assertEqual(self.client.post('/takeback').get_json()['undone'], 2)
+        self.assertEqual(web.game_board.fen(), chess.Board().fen())
+
+    def test_it_leaves_the_turn_with_you(self):
+        self.pair('e2e4')
+        self.pair('d2d4')
+        self.client.post('/takeback')
+        self.assertTrue(web.human_to_move())
+
+    def test_the_history_shrinks_with_the_board(self):
+        self.pair('e2e4')
+        self.pair('d2d4')
+        self.client.post('/takeback')
+        self.assertEqual(web.move_history, ['You: e4', 'Knightmare: c6'])
+
+    def test_repeated_takebacks_reach_the_start(self):
+        self.pair('e2e4')
+        self.pair('d2d4')
+        self.client.post('/takeback')
+        self.client.post('/takeback')
+        self.assertEqual(web.game_board.fen(), chess.Board().fen())
+        self.assertEqual(web.move_history, [])
+
+    def test_nothing_to_undo_is_refused(self):
+        response = self.client.post('/takeback')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('No moves', response.get_json()['error'])
+
+    def test_it_is_refused_while_watching(self):
+        self.client.post('/set_mode', json={'mode': 'watch'})
+        self.client.post('/move')
+        response = self.client.post('/takeback')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('playing', response.get_json()['error'])
+
+    def test_a_stale_engine_line_is_dropped(self):
+        """It described a position that no longer exists"""
+        self.pair('e2e4')
+        self.client.post('/takeback')
+        self.assertIsNone(self.board()['engine'])
+
+    def test_a_finished_game_can_be_unwound(self):
+        """Otherwise a loss leaves you stuck with no way back"""
+        # Played rather than set from a FEN, because a position loaded
+        # from a FEN has no history to take back
+        for uci in ('f2f3', 'e7e5', 'g2g4', 'd8h4'):
+            web.game_board.push(chess.Move.from_uci(uci))
+            web.move_history.append(uci)
+        self.assertTrue(web.game_board.is_checkmate())
+
+        self.assertEqual(self.client.post('/takeback').get_json()['undone'], 2)
+        self.assertFalse(web.game_board.is_game_over())
+        self.assertTrue(web.human_to_move())
+
+    def test_you_can_take_back_your_own_last_move(self):
+        """After the engine has replied there is a pair to unwind"""
+        self.pair('a2a4')
+        before = len(web.game_board.move_stack)
+        self.client.post('/takeback')
+        self.assertEqual(len(web.game_board.move_stack), before - 2)
+
+
 class TestBoardReport(PlayTestCase):
     def test_your_turn_is_reported(self):
         self.play()
