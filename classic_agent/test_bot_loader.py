@@ -10,14 +10,17 @@ Run with:
     python3 -m unittest test_bot_loader
 """
 
+import io
 import unittest
 
 import chess
+import chess.pgn
 
 from bot_loader import (
     ask_engine,
     best_move,
     describe_info,
+    game_pgn,
     load_bot_class,
     parse_info,
     random_move,
@@ -268,6 +271,91 @@ class TestAskEngine(unittest.TestCase):
         before = self.board.fen()
         ask_engine(MutatingBot(), self.board)
         self.assertEqual(self.board.fen(), before)
+
+
+class TestGamePgn(unittest.TestCase):
+    """Writing a game out in a form other chess software will read"""
+
+    def board_after(self, *ucis, fen=None):
+        board = chess.Board(fen) if fen else chess.Board()
+        for uci in ucis:
+            board.push(chess.Move.from_uci(uci))
+        return board
+
+    def pgn(self, board, white="White", black="Black"):
+        return game_pgn(board, white, black)
+
+    def parsed(self, board, **names):
+        return chess.pgn.read_game(io.StringIO(self.pgn(board, **names)))
+
+    def test_an_empty_game_is_still_valid_pgn(self):
+        self.assertIsNotNone(self.parsed(chess.Board()))
+
+    def test_the_moves_read_back_to_the_same_position(self):
+        board = self.board_after("e2e4", "e7e5", "g1f3", "b8c6", "f1b5")
+        self.assertEqual(self.parsed(board).end().board().fen(), board.fen())
+
+    def test_moves_are_written_in_algebraic(self):
+        board = self.board_after("e2e4", "e7e5", "g1f3")
+        self.assertIn("1. e4 e5 2. Nf3", self.pgn(board))
+
+    def test_the_players_are_named(self):
+        headers = self.parsed(chess.Board(), white="Alice", black="Bob").headers
+        self.assertEqual(headers["White"], "Alice")
+        self.assertEqual(headers["Black"], "Bob")
+
+    def test_an_unfinished_game_has_no_result(self):
+        self.assertIn('[Result "*"]', self.pgn(self.board_after("e2e4")))
+
+    def test_a_win_is_recorded(self):
+        board = self.board_after("f2f3", "e7e5", "g2g4", "d8h4")
+        self.assertIn('[Result "0-1"]', self.pgn(board))
+
+    def test_a_stalemate_is_a_draw(self):
+        board = self.board_after("f7g6", fen="7k/5Q2/8/8/8/8/8/6K1 w - - 0 1")
+        self.assertTrue(board.is_stalemate())
+        self.assertIn('[Result "1/2-1/2"]', self.pgn(board))
+
+    def test_a_game_from_a_fen_records_where_it_started(self):
+        """The moves alone would replay from the wrong position"""
+        fen = "8/8/4k3/8/8/8/4P3/4K3 w - - 0 1"
+        board = self.board_after("e2e4", fen=fen)
+        game = self.parsed(board)
+        self.assertEqual(game.headers["FEN"], fen)
+        self.assertEqual(game.headers["SetUp"], "1")
+        self.assertEqual(game.end().board().fen(), board.fen())
+
+    def test_a_game_from_a_fen_numbers_from_that_move(self):
+        board = self.board_after("e6d6", fen="8/8/4k3/8/8/8/4P3/4K3 b - - 4 20")
+        self.assertIn("20... Kd6", self.pgn(board))
+
+    def test_a_normal_game_records_no_starting_position(self):
+        text = self.pgn(self.board_after("e2e4"))
+        self.assertNotIn("FEN", text)
+        self.assertNotIn("SetUp", text)
+
+    def test_lines_are_wrapped_at_eighty_columns(self):
+        board = chess.Board()
+        for _ in range(60):
+            board.push(next(iter(board.legal_moves)))
+        for line in self.pgn(board).splitlines():
+            self.assertLessEqual(len(line), 80, line)
+
+    def test_a_blank_line_separates_headers_from_moves(self):
+        lines = self.pgn(self.board_after("e2e4")).splitlines()
+        self.assertIn("", lines)
+        self.assertTrue(lines[lines.index("") - 1].startswith("["))
+
+    def test_it_ends_with_a_newline(self):
+        self.assertTrue(self.pgn(chess.Board()).endswith("\n"))
+
+    def test_the_board_is_not_disturbed(self):
+        board = self.board_after("e2e4", "e7e5")
+        before = board.fen()
+        depth = len(board.move_stack)
+        self.pgn(board)
+        self.assertEqual(board.fen(), before)
+        self.assertEqual(len(board.move_stack), depth)
 
 
 if __name__ == "__main__":
