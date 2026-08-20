@@ -119,36 +119,15 @@ class TestSearchAlwaysReturnsLegalMoves(unittest.TestCase):
 
 
 class TestTimeBudget(unittest.TestCase):
-    """Overrunning the clock loses games, so the budget has to be respected"""
+    """Overrunning the clock loses games, so the budget has to be respected
+
+    The bounds a started iteration can be held to live in TestHardDeadline
+    below. What is left here is the rest of the contract: something legal
+    always comes back, and more time never searches less deeply.
+    """
 
     # Rich enough that a deep search would take far longer than the budget
     BUSY_FEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
-
-    # Starting an iteration can overshoot, so allow some slack
-    TOLERANCE = 2.5
-
-    def test_short_budget_is_respected(self):
-        board = chess.Board(self.BUSY_FEN)
-        bot = KnightmareBot()
-
-        start = time.time()
-        move = bot.get_move(board, 0.3, 6)
-        elapsed = time.time() - start
-
-        self.assertIn(move, board.legal_moves)
-        self.assertLess(elapsed, 0.3 * self.TOLERANCE,
-                        f"took {elapsed:.2f}s for a 0.3s budget")
-
-    def test_medium_budget_is_respected(self):
-        board = chess.Board(self.BUSY_FEN)
-        bot = KnightmareBot()
-
-        start = time.time()
-        bot.get_move(board, 1.0, 6)
-        elapsed = time.time() - start
-
-        self.assertLess(elapsed, 1.0 * self.TOLERANCE,
-                        f"took {elapsed:.2f}s for a 1.0s budget")
 
     def test_a_move_is_still_returned_on_a_tiny_budget(self):
         """Even with no time to think, something legal must come back"""
