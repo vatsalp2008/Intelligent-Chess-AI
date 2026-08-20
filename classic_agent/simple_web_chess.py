@@ -4,7 +4,7 @@ Simple Web Chess Interface - Direct Integration
 Works directly with the Knightmare bot code without UCI
 """
 
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 import argparse
 import threading
 
@@ -34,6 +34,12 @@ board_lock = threading.Lock()
 # What the engine last reported about its search, shown in the interface
 last_engine_info = None
 
+# Who plays which side. "watch" is the original behaviour, a random bot
+# against Knightmare. "play" hands White to whoever is at the keyboard.
+WATCH_MODE = "watch"
+PLAY_MODE = "play"
+mode = WATCH_MODE
+
 def reset_game():
     global game_board, move_history, knightmare, last_engine_info
     game_board = chess.Board()
@@ -41,6 +47,11 @@ def reset_game():
     last_engine_info = None
     if bot_class:
         knightmare = bot_class()
+
+
+def human_to_move():
+    """True when the interface is waiting for a person rather than a bot"""
+    return mode == PLAY_MODE and game_board.turn == chess.WHITE
 
 def get_knightmare_move(board):
     """Get move from Knightmare bot, remembering what it reported"""
@@ -343,6 +354,62 @@ def get_board():
             'white_to_move': game_board.turn == chess.WHITE,
             'engine': last_engine_info,
         })
+
+@app.route('/set_mode', methods=['POST'])
+def set_mode():
+    """Switch between watching two bots and playing one yourself
+
+    Changing mode starts a new game: carrying a half-played position across
+    would leave the side you just took over having already moved.
+    """
+    global mode
+
+    data = request.get_json(silent=True) or {}
+    requested = data.get('mode', WATCH_MODE)
+    if requested not in (WATCH_MODE, PLAY_MODE):
+        return jsonify({'error': f'unknown mode {requested!r}'}), 400
+
+    with board_lock:
+        mode = requested
+        reset_game()
+
+    return jsonify({'success': True, 'mode': mode})
+
+
+@app.route('/human_move', methods=['POST'])
+def human_move():
+    """Play the move a person chose, given as UCI
+
+    Rejected rather than silently ignored when it is not that person's turn
+    or the move is not legal, so the interface can say why.
+    """
+    global game_board, move_history
+
+    data = request.get_json(silent=True) or {}
+    uci = str(data.get('move', ''))
+
+    with board_lock:
+        if game_board.is_game_over():
+            return jsonify({'error': 'Game is over'}), 400
+
+        if not human_to_move():
+            return jsonify({'error': 'It is not your turn'}), 400
+
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            # A pawn reaching the last rank needs a promotion piece
+            return jsonify({'error': f'Could not read the move {uci!r}'}), 400
+
+        if move not in game_board.legal_moves:
+            return jsonify({'error': f'{uci} is not legal here'}), 400
+
+        san = game_board.san(move)
+        game_board.push(move)
+        move_history.append(f"You: {san}")
+
+    return jsonify({'success': True, 'san': san})
+
 
 @app.route('/new_game', methods=['POST'])
 def new_game():
