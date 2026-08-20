@@ -204,6 +204,10 @@ def game_pgn(board, white, black):
     for move in board.move_stack:
         if scratch.turn == chess.WHITE:
             text.append(f'{scratch.fullmove_number}.')
+        elif not text:
+            # A game set up from a FEN can begin on Black's move, which is
+            # written "20..." so the number is not read as White's
+            text.append(f'{scratch.fullmove_number}...')
         text.append(scratch.san(move))
         scratch.push(move)
     text.append(board.result(claim_draw=True))
