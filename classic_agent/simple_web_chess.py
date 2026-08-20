@@ -209,6 +209,7 @@ HTML = """
             <button onclick="makeMove()">Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">Auto Play: OFF</button>
             <button onclick="toggleMode()" id="mode-btn">Mode: Watch</button>
+            <button onclick="takeBack()" id="undo-btn">Take Back</button>
 
             <h3>Move History</h3>
             <div id="moves"></div>
@@ -462,12 +463,27 @@ HTML = """
                 });
         }
 
+        function takeBack() {
+            fetch('/takeback', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    selected = null;
+                    return updateBoard();
+                });
+        }
+
         function showMode() {
             const button = document.getElementById('mode-btn');
             button.textContent = playMode ? 'Mode: You vs Knightmare' : 'Mode: Watch';
             button.className = playMode ? 'active' : '';
             // Nothing to step through by hand when it is your turn
             document.getElementById('auto-btn').disabled = playMode;
+            // There is no side of yours to take a move back for otherwise
+            document.getElementById('undo-btn').disabled = !playMode;
             document.getElementById('white-player').textContent =
                 playMode ? '⚪ White: You' : '⚪ White: Random Bot';
         }
@@ -494,6 +510,7 @@ HTML = """
         }
 
         // Load board on startup
+        showMode();
         updateBoard();
     </script>
 </body>
