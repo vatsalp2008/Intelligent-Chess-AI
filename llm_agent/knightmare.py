@@ -38,6 +38,11 @@ DEFAULT_MAX_DEPTH = 4
 # the next iteration will fit in the time that is left
 BRANCHING_ESTIMATE = 4.0
 
+# Nodes searched between clock checks. Reading the clock on every node is
+# measurable overhead, and a few thousand nodes is a fraction of a
+# millisecond of extra thinking.
+CLOCK_CHECK_INTERVAL = 2048
+
 # Hard ceiling for an explicitly requested search depth
 MAX_SEARCH_DEPTH = 6
 
@@ -189,6 +194,16 @@ def format_score(score):
     return f"cp {int(score)}"
 
 
+class SearchAborted(Exception):
+    """Raised inside the search once the time budget has run out
+
+    The clock used to be read only between iterations, with the next
+    depth's cost predicted from the last one. When that prediction was
+    wrong the iteration still ran to the end: a one second budget was
+    measured taking twenty eight seconds, which on a real clock is a loss.
+    """
+
+
 class KnightmareFast:
     def __init__(self):
         self.reset()
@@ -196,6 +211,11 @@ class KnightmareFast:
     def reset(self):
         """Reset the bot state"""
         self.nodes = 0
+        # When the current search must stop, or None if it is unbounded
+        self.deadline = None
+        # Set when a root search ran out of time with at least one move
+        # already finished, so its answer is usable but incomplete
+        self.aborted = False
         self.transposition_table = {}
         self.opening_book = self.create_simple_opening_book()
         
@@ -336,6 +356,15 @@ class KnightmareFast:
         move_scores.sort(key=lambda x: x[1], reverse=True)
         return [move for move, _ in move_scores]
     
+    def check_clock(self):
+        """Abort the search if the budget has run out"""
+        if self.deadline is None:
+            return
+        if self.nodes % CLOCK_CHECK_INTERVAL:
+            return
+        if time.time() >= self.deadline:
+            raise SearchAborted()
+
     def quiesce(self, board, alpha, beta, ply=0, depth=QUIESCENCE_DEPTH):
         """Keep resolving captures before scoring the position
 
@@ -343,6 +372,7 @@ class KnightmareFast:
         recapture will never happen, which makes the engine hang pieces.
         """
         self.nodes += 1
+        self.check_clock()
 
         if board.is_game_over():
             return self.evaluate_board(board, ply)
@@ -386,6 +416,7 @@ class KnightmareFast:
     def minimax(self, board, depth, alpha, beta, maximizing, ply=0):
         """Simple minimax with alpha-beta pruning"""
         self.nodes += 1
+        self.check_clock()
 
         # Terminal conditions
         if board.is_game_over():
@@ -423,10 +454,22 @@ class KnightmareFast:
 
         if maximizing:
             max_eval = -float('inf')
+            searched = 0
             for move in moves:
                 board.push(move)
-                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False, ply + 1)
+                try:
+                    eval_score, _ = self.minimax(board, depth - 1, alpha, beta, False, ply + 1)
+                except SearchAborted:
+                    board.pop()
+                    # A root move searched to this depth beats the whole of
+                    # the previous, shallower depth, so keep it. Deeper in
+                    # the tree a half-searched node means nothing.
+                    if ply == 0 and searched:
+                        self.aborted = True
+                        return max_eval, best_move
+                    raise
                 board.pop()
+                searched += 1
 
                 if eval_score > max_eval:
                     max_eval = eval_score
@@ -441,10 +484,19 @@ class KnightmareFast:
             return max_eval, best_move
         else:
             min_eval = float('inf')
+            searched = 0
             for move in moves:
                 board.push(move)
-                eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True, ply + 1)
+                try:
+                    eval_score, _ = self.minimax(board, depth - 1, alpha, beta, True, ply + 1)
+                except SearchAborted:
+                    board.pop()
+                    if ply == 0 and searched:
+                        self.aborted = True
+                        return min_eval, best_move
+                    raise
                 board.pop()
+                searched += 1
 
                 if eval_score < min_eval:
                     min_eval = eval_score
@@ -495,7 +547,11 @@ class KnightmareFast:
         # Use minimax to find best move
         # CRITICAL: Create a fresh copy for search
         search_board = board.copy()
-        
+
+        # A stop the search itself honours, rather than only the prediction
+        # below, which is an estimate and can be badly wrong
+        self.deadline = start_time + max_time
+
         best_move = legal_moves[0]  # Default to first legal move
 
         # Iterative deepening. Scores from different depths are not
@@ -515,6 +571,7 @@ class KnightmareFast:
                 if elapsed + last_iteration * BRANCHING_ESTIMATE > max_time:
                     break
 
+            self.aborted = False
             try:
                 eval_score, move = self.minimax(
                     search_board,
@@ -538,15 +595,30 @@ class KnightmareFast:
 
                 last_iteration = time.time() - iteration_start
 
+            except SearchAborted:
+                # Out of time with no root move finished at this depth, so
+                # there is nothing from it worth keeping. Listed before the
+                # catch-all below, which would otherwise call it an error.
+                print("info string search aborted on time")
+                break
             except Exception as e:
                 print(f"info string Error in minimax at depth {depth}: {e}")
                 break
-        
+
+            if self.aborted:
+                # Part of this depth finished. Its move is worth keeping,
+                # but a run that was cut short says nothing about what the
+                # depth costs, and there is no time for another one.
+                print(f"info string depth {depth} cut short on time")
+                break
+
+        self.deadline = None
+
         # FINAL SAFETY CHECK: Ensure we return a legal move
         if best_move not in legal_moves:
             print(f"info string Best move {best_move} not legal, using fallback")
             best_move = legal_moves[0]
-        
+
         return best_move
 
 def token_value(parts, name):
