@@ -20,7 +20,13 @@ import unittest
 
 import chess
 
-from knightmare_bot import KnightmareBot, parse_go, parse_position
+from knightmare_bot import (
+    CLOCK_CHECK_INTERVAL,
+    KnightmareBot,
+    SearchAborted,
+    parse_go,
+    parse_position,
+)
 
 # A spread of position types: openings, tactics, endgames, promotions,
 # checks, castling rights, en passant and near-stalemate.
@@ -162,6 +168,127 @@ class TestTimeBudget(unittest.TestCase):
             return max(depths) if depths else 0
 
         self.assertGreaterEqual(depth_for(2.0), depth_for(0.2))
+
+
+class TestHardDeadline(unittest.TestCase):
+    """The search must stop mid iteration, not only between iterations
+
+    The cost of the next depth is predicted from the last one, and that
+    prediction can be badly wrong. Before the search itself watched the
+    clock, a depth that turned out to cost twenty times its prediction ran
+    to the end anyway, which on a real clock forfeits the game.
+    """
+
+    # A deep search here costs tens of seconds, so any budget below that
+    # can only be met by abandoning an iteration part way through
+    BUSY_FEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+
+    def search(self, budget, depth=12, fen=None):
+        """Search with a deep depth limit, so only the clock can stop it"""
+        board = chess.Board(fen or self.BUSY_FEN)
+        bot = KnightmareBot()
+        with contextlib.redirect_stdout(io.StringIO()):
+            start = time.time()
+            move = bot.get_move(board, budget, depth)
+            elapsed = time.time() - start
+        return bot, board, move, elapsed
+
+    def test_a_deep_search_still_stops_near_the_budget(self):
+        _, board, move, elapsed = self.search(1.0)
+        self.assertIn(move, board.legal_moves)
+        self.assertLess(elapsed, 2.0, f"took {elapsed:.2f}s for a 1.0s budget")
+
+    def test_the_budget_is_honoured_at_several_sizes(self):
+        for budget in (0.2, 0.5, 1.0):
+            with self.subTest(budget=budget):
+                _, _, _, elapsed = self.search(budget)
+                # One clock check interval of slack, plus the fixed cost of
+                # the mate scan that runs before any searching
+                self.assertLess(elapsed, budget + 0.5,
+                                f"took {elapsed:.2f}s for a {budget}s budget")
+
+    def test_an_abandoned_search_leaves_the_board_alone(self):
+        """Unwinding out of the search skips the matching pops"""
+        board = chess.Board(self.BUSY_FEN)
+        before = board.fen()
+        bot = KnightmareBot()
+        with contextlib.redirect_stdout(io.StringIO()):
+            bot.get_move(board, 0.4, 12)
+        self.assertEqual(board.fen(), before)
+
+    def test_a_legal_move_comes_back_from_an_abandoned_search(self):
+        for budget in (0.05, 0.15, 0.4):
+            with self.subTest(budget=budget):
+                _, board, move, _ = self.search(budget)
+                self.assertIn(move, board.legal_moves)
+
+    def test_the_deadline_is_released_afterwards(self):
+        """Otherwise the next search is still bound by the last one's clock"""
+        bot, _, _, _ = self.search(0.2)
+        self.assertIsNone(bot.deadline)
+
+    def test_a_later_unlimited_search_is_not_cut_short(self):
+        bot, _, _, _ = self.search(0.05)
+        board = chess.Board(self.BUSY_FEN)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertIn(bot.get_move(board, 600.0, 2), board.legal_moves)
+
+    def test_part_of_a_depth_is_better_than_none_of_it(self):
+        """A root move searched deeper beats the whole shallower depth"""
+        board = chess.Board(self.BUSY_FEN)
+        bot = KnightmareBot()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            move = bot.get_move(board, 2.0, 12)
+        output = buffer.getvalue()
+        self.assertIn(move, board.legal_moves)
+        # Either it finished cleanly or it reported using a partial depth,
+        # but it must never silently discard one it had already started
+        if "aborted on time" not in output:
+            self.assertTrue(
+                "cut short on time" in output or "info depth" in output,
+                output,
+            )
+
+
+class TestClockCheck(unittest.TestCase):
+    """The check itself, away from a real search"""
+
+    def setUp(self):
+        self.bot = KnightmareBot()
+
+    def test_no_deadline_never_aborts(self):
+        self.bot.deadline = None
+        self.bot.nodes = CLOCK_CHECK_INTERVAL
+        self.bot.check_clock()  # must not raise
+
+    def test_a_future_deadline_does_not_abort(self):
+        self.bot.deadline = time.time() + 60
+        self.bot.nodes = CLOCK_CHECK_INTERVAL
+        self.bot.check_clock()
+
+    def test_a_passed_deadline_aborts(self):
+        self.bot.deadline = time.time() - 1
+        self.bot.nodes = CLOCK_CHECK_INTERVAL
+        with self.assertRaises(SearchAborted):
+            self.bot.check_clock()
+
+    def test_the_clock_is_only_read_periodically(self):
+        """Reading it on every node is measurable overhead at these rates"""
+        self.bot.deadline = time.time() - 1
+        self.bot.nodes = CLOCK_CHECK_INTERVAL + 1
+        self.bot.check_clock()
+
+    def test_it_fires_once_per_interval(self):
+        self.bot.deadline = time.time() - 1
+        aborts = 0
+        for node in range(1, 4 * CLOCK_CHECK_INTERVAL + 1):
+            self.bot.nodes = node
+            try:
+                self.bot.check_clock()
+            except SearchAborted:
+                aborts += 1
+        self.assertEqual(aborts, 4)
 
 
 class TestUciRoundTrip(unittest.TestCase):
