@@ -274,6 +274,77 @@ class TestBoardReport(PlayTestCase):
         self.assertIn('Random', self.board()['status'])
 
 
+class TestSetPosition(PlayTestCase):
+    """Loading a position by FEN, mostly about what it refuses"""
+
+    # King on e1 rather than e3, so the pawn in front of it can actually
+    # move and the position is worth playing from
+    ENDGAME = '8/8/4k3/8/8/8/4P3/4K3 w - - 0 1'
+
+    def load(self, fen):
+        return self.client.post('/set_position', json={'fen': fen})
+
+    def test_a_legal_position_is_accepted(self):
+        self.assertEqual(self.load(self.ENDGAME).status_code, 200)
+        self.assertEqual(web.game_board.fen(), self.ENDGAME)
+
+    def test_the_normalised_fen_comes_back(self):
+        self.assertEqual(self.load(self.ENDGAME).get_json()['fen'], self.ENDGAME)
+
+    def test_it_clears_the_previous_game(self):
+        self.play()
+        self.send('e2e4')
+        self.load(self.ENDGAME)
+        self.assertEqual(web.move_history, [])
+        self.assertIsNone(self.board()['engine'])
+
+    def test_an_empty_request_is_refused(self):
+        response = self.load('')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('No position', response.get_json()['error'])
+
+    def test_no_body_at_all_is_refused(self):
+        self.assertEqual(self.client.post('/set_position').status_code, 400)
+
+    def test_an_unreadable_fen_is_refused(self):
+        response = self.load('not a fen')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Could not read', response.get_json()['error'])
+
+    def test_a_position_with_no_king_is_refused(self):
+        """The search assumes it will never see one"""
+        response = self.load('4k3/8/8/8/8/8/8/8 w - - 0 1')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('no white king', response.get_json()['error'])
+
+    def test_a_side_already_in_check_is_refused(self):
+        response = self.load('8/8/8/8/8/8/8/4Kk2 w - - 0 1')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('opposite check', response.get_json()['error'])
+
+    def test_a_refused_position_leaves_the_board_alone(self):
+        before = web.game_board.fen()
+        self.load('not a fen')
+        self.load('4k3/8/8/8/8/8/8/8 w - - 0 1')
+        self.assertEqual(web.game_board.fen(), before)
+
+    def test_the_engine_can_play_from_the_loaded_position(self):
+        self.load(self.ENDGAME)
+        self.client.post('/move')
+        self.assertEqual(len(web.game_board.move_stack), 1)
+
+    def test_you_can_play_from_the_loaded_position(self):
+        self.play()
+        self.load(self.ENDGAME)
+        self.assertEqual(self.send('e2e4').get_json()['san'], 'e4')
+
+    def test_the_legal_move_list_matches_the_loaded_position(self):
+        self.play()
+        self.load(self.ENDGAME)
+        listed = sum(len(v) for v in self.board()['legal'].values())
+        self.assertEqual(listed, web.game_board.legal_moves.count())
+
+
 class TestPgnExport(PlayTestCase):
     """A game is only worth playing if it can be taken away and studied"""
 
