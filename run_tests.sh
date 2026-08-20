@@ -97,9 +97,11 @@ fi
 if have_module flask; then
     run "classic: web concurrency" classic_agent "$PYTHON" -m unittest test_web_concurrency
     run "classic: web settings"    classic_agent "$PYTHON" -m unittest test_web_settings
+    run "classic: web play"        classic_agent "$PYTHON" -m unittest test_web_play
 else
     skip "classic: web concurrency" "flask not installed"
     skip "classic: web settings" "flask not installed"
+    skip "classic: web play" "flask not installed"
 fi
 
 # Slower end-to-end checks that start real subprocesses
