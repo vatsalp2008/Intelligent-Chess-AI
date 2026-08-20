@@ -211,6 +211,7 @@ HTML = """
             <button onclick="toggleAuto()" id="auto-btn">Auto Play: OFF</button>
             <button onclick="toggleMode()" id="mode-btn">Mode: Watch</button>
             <button onclick="takeBack()" id="undo-btn">Take Back</button>
+            <button onclick="savePgn()">Save PGN</button>
 
             <h3>Move History</h3>
             <div id="moves"></div>
@@ -475,6 +476,12 @@ HTML = """
                     selected = null;
                     return updateBoard();
                 });
+        }
+
+        function savePgn() {
+            // A plain navigation rather than a fetch, so the browser's own
+            // download handling names and saves the file
+            window.location = '/pgn';
         }
 
         function showMode() {
