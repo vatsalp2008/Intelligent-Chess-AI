@@ -203,6 +203,7 @@ HTML = """
             <button onclick="newGame()">New Game</button>
             <button onclick="makeMove()">Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">Auto Play: OFF</button>
+            <button onclick="toggleMode()" id="mode-btn">Mode: Watch</button>
 
             <h3>Move History</h3>
             <div id="moves"></div>
@@ -212,6 +213,7 @@ HTML = """
     <script>
         let autoPlay = false;
         let autoTimer = null;
+        let playMode = false;
 
         // Breathing room between moves so the board is visible
         const AUTO_PLAY_GAP_MS = 250;
@@ -222,6 +224,13 @@ HTML = """
                 .then(data => {
                     document.getElementById('board').innerHTML = data.svg;
                     document.getElementById('status').textContent = data.status;
+
+                    // The server owns the mode: a reload would otherwise
+                    // show Watch while a game against a person is running
+                    if (playMode !== (data.mode === 'play')) {
+                        playMode = data.mode === 'play';
+                        showMode();
+                    }
 
                     // What the engine reported about its own search
                     const engine = data.engine;
@@ -295,6 +304,38 @@ HTML = """
                     autoTimer = setTimeout(autoStep, AUTO_PLAY_GAP_MS);
                 }
             });
+        }
+
+        function toggleMode() {
+            // Switching sides restarts the game, so stop auto play first:
+            // a move already in flight would land on the new position
+            stopAuto();
+            const wanted = playMode ? 'watch' : 'play';
+            fetch('/set_mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: wanted})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    playMode = data.mode === 'play';
+                    showMode();
+                    return updateBoard();
+                });
+        }
+
+        function showMode() {
+            const button = document.getElementById('mode-btn');
+            button.textContent = playMode ? 'Mode: You vs Knightmare' : 'Mode: Watch';
+            button.className = playMode ? 'active' : '';
+            // Nothing to step through by hand when it is your turn
+            document.getElementById('auto-btn').disabled = playMode;
+            document.getElementById('white-player').textContent =
+                playMode ? '⚪ White: You' : '⚪ White: Random Bot';
         }
 
         function toggleAuto() {
