@@ -4,7 +4,7 @@ Knightmare vs Stockfish Web Interface
 Test your bot against the world's strongest chess engine
 """
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, Response, render_template_string, jsonify, request
 import argparse
 import chess
 import chess.svg
@@ -15,7 +15,7 @@ import threading
 import time
 import os
 
-from bot_loader import ask_engine, load_bot_class, random_move
+from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
 
 bot_class = load_bot_class()
 
@@ -381,6 +381,7 @@ HTML = """
             <button onclick="newGame()">🆕 New Game</button>
             <button onclick="makeMove()">▶️ Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">🔄 Auto Play: OFF</button>
+            <button onclick="savePgn()">💾 Save PGN</button>
 
             <h3>📋 Move History</h3>
             <div id="moves"></div>
@@ -510,6 +511,12 @@ HTML = """
             newGame();
         }
 
+        function savePgn() {
+            // A plain navigation rather than a fetch, so the browser's own
+            // download handling names and saves the file
+            window.location = '/pgn';
+        }
+
         function newGame() {
             stopAuto();
             fetch('/new_game', {method: 'POST'})
@@ -625,6 +632,26 @@ def get_board():
             'stockfish_available': stockfish_engine is not None,
             'engine': last_engine_info,
         })
+
+@app.route('/pgn')
+def download_pgn():
+    """The current game as a PGN file
+
+    Named by which engine is on which side, so a saved game says what was
+    actually played rather than just White and Black.
+    """
+    with board_lock:
+        knightmare_white = app.config.get('white_is_knightmare', False)
+        stockfish = f'Stockfish level {stockfish_level}'
+        white, black = ('Knightmare', stockfish) if knightmare_white else (stockfish, 'Knightmare')
+        text = game_pgn(game_board, white, black)
+
+    return Response(
+        text,
+        mimetype='application/x-chess-pgn',
+        headers={'Content-Disposition': 'attachment; filename=knightmare.pgn'},
+    )
+
 
 @app.route('/new_game', methods=['POST'])
 def new_game():
