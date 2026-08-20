@@ -53,6 +53,20 @@ def human_to_move():
     """True when the interface is waiting for a person rather than a bot"""
     return mode == PLAY_MODE and game_board.turn == chess.WHITE
 
+
+def legal_by_origin(board):
+    """Legal moves as {from_square: [uci, ...]}
+
+    Sent to the browser so it can show a piece's options and reject an
+    impossible drag without having to know how chess works. Promotions
+    appear as the full UCI including the piece, so the client can offer a
+    choice when several share the same destination.
+    """
+    grouped = {}
+    for move in board.legal_moves:
+        grouped.setdefault(chess.square_name(move.from_square), []).append(move.uci())
+    return grouped
+
 def get_knightmare_move(board):
     """Get move from Knightmare bot, remembering what it reported"""
     global knightmare, last_engine_info
@@ -341,8 +355,15 @@ def get_board():
         elif game_board.is_game_over():
             status = "Game Over"
         else:
-            turn = "White (Random)" if game_board.turn == chess.WHITE else "Black (Knightmare)"
-            status = f"{turn} to move"
+            if mode == PLAY_MODE:
+                # Phrased as a prompt rather than "X to move", which reads
+                # oddly when the side to move is the person reading it
+                status = ("Your move" if game_board.turn == chess.WHITE
+                          else "Knightmare is thinking...")
+            else:
+                turn = ("White (Random)" if game_board.turn == chess.WHITE
+                        else "Black (Knightmare)")
+                status = f"{turn} to move"
             if game_board.is_check():
                 status += " - CHECK!"
 
@@ -353,6 +374,11 @@ def get_board():
             'game_over': game_board.is_game_over(),
             'white_to_move': game_board.turn == chess.WHITE,
             'engine': last_engine_info,
+            'mode': mode,
+            'your_turn': human_to_move(),
+            # Legal moves grouped by origin square, so the interface can
+            # highlight where a piece may go without knowing the rules
+            'legal': legal_by_origin(game_board),
         })
 
 @app.route('/set_mode', methods=['POST'])
