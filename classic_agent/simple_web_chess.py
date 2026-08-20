@@ -612,6 +612,41 @@ def human_move():
     return jsonify({'success': True, 'san': san})
 
 
+@app.route('/takeback', methods=['POST'])
+def takeback():
+    """Undo back to your own turn
+
+    A single pop would hand the move back to the engine, which would just
+    play again, so this unwinds whole move pairs: the engine's reply and
+    the move of yours it answered.
+    """
+    global game_board, move_history, last_engine_info
+
+    with board_lock:
+        if mode != PLAY_MODE:
+            return jsonify({'error': 'Takeback is only for a game you are playing'}), 400
+
+        if not game_board.move_stack:
+            return jsonify({'error': 'No moves to take back'}), 400
+
+        undone = 0
+        # Stop once it is your turn again, or once nothing is left. A game
+        # that has ended is still unwound, so a loss can be replayed.
+        while game_board.move_stack:
+            game_board.pop()
+            undone += 1
+            if move_history:
+                move_history.pop()
+            if game_board.turn == chess.WHITE:
+                break
+
+        # The line the engine reported was for a position that no longer
+        # exists, so showing it would be misleading
+        last_engine_info = None
+
+    return jsonify({'success': True, 'undone': undone})
+
+
 @app.route('/new_game', methods=['POST'])
 def new_game():
     with board_lock:
