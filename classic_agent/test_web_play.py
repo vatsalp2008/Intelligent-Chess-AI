@@ -175,7 +175,11 @@ class TestTakeback(PlayTestCase):
         self.pair('e2e4')
         self.pair('d2d4')
         self.client.post('/takeback')
-        self.assertEqual(web.move_history, ['You: e4', 'Knightmare: c6'])
+        # The engine picks its book reply at random, so only your own
+        # moves can be named here
+        self.assertEqual(len(web.move_history), 2)
+        self.assertEqual(web.move_history[0], 'You: e4')
+        self.assertTrue(web.move_history[1].startswith('Knightmare: '))
 
     def test_repeated_takebacks_reach_the_start(self):
         self.pair('e2e4')
