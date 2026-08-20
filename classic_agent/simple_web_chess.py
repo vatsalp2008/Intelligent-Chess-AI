@@ -100,6 +100,11 @@ HTML = """
             gap: 30px;
             align-items: flex-start;
         }
+        /* Pieces are drawn on top of the square rectangles, so without
+           this a click on a piece never reaches the square under it */
+        #board use {
+            pointer-events: none;
+        }
         .board-container {
             background: white;
             padding: 20px;
@@ -214,6 +219,12 @@ HTML = """
         let autoPlay = false;
         let autoTimer = null;
         let playMode = false;
+        let legalMoves = {};
+        let selected = null;
+
+        // The colour used to outline the square you picked and the squares
+        // that piece can reach
+        const HIGHLIGHT = '#2f9e44';
 
         // Breathing room between moves so the board is visible
         const AUTO_PLAY_GAP_MS = 250;
@@ -258,6 +269,14 @@ HTML = """
                         document.getElementById('white-player').className = 'player-indicator inactive';
                         document.getElementById('black-player').className = 'player-indicator active';
                     }
+
+                    // Redrawing replaces the squares, so the handlers and
+                    // the move list have to be attached to the new ones
+                    legalMoves = data.your_turn ? (data.legal || {}) : {};
+                    if (!data.your_turn) {
+                        selected = null;
+                    }
+                    wireBoard();
 
                     // Stop auto play if game over
                     if (data.game_over && autoPlay) {
@@ -304,6 +323,121 @@ HTML = """
                     autoTimer = setTimeout(autoStep, AUTO_PLAY_GAP_MS);
                 }
             });
+        }
+
+        function squareName(rect) {
+            // python-chess names each square in the rect's class, as in
+            // "square dark a1", so the board needs no coordinate maths
+            const parts = rect.getAttribute('class').split(' ');
+            return parts[parts.length - 1];
+        }
+
+        function boardSquares() {
+            return document.querySelectorAll('#board rect.square');
+        }
+
+        function wireBoard() {
+            const clickable = playMode && !document.getElementById('board').dataset.locked;
+            boardSquares().forEach(rect => {
+                const name = squareName(rect);
+                rect.style.cursor = clickable ? 'pointer' : 'default';
+                rect.onclick = clickable ? () => clickSquare(name) : null;
+            });
+            showSelection();
+        }
+
+        function showSelection() {
+            boardSquares().forEach(rect => {
+                const name = squareName(rect);
+                const reachable = selected && (legalMoves[selected] || [])
+                    .some(uci => uci.slice(2, 4) === name);
+                if (name === selected) {
+                    rect.setAttribute('stroke', HIGHLIGHT);
+                    rect.setAttribute('stroke-width', '4');
+                } else if (reachable) {
+                    rect.setAttribute('stroke', HIGHLIGHT);
+                    rect.setAttribute('stroke-width', '2');
+                } else {
+                    rect.setAttribute('stroke', 'none');
+                }
+            });
+        }
+
+        function clickSquare(name) {
+            if (selected === null) {
+                // Only squares holding a piece of yours that can move
+                if (legalMoves[name]) {
+                    selected = name;
+                    showSelection();
+                }
+                return;
+            }
+
+            if (name === selected) {
+                selected = null;
+                showSelection();
+                return;
+            }
+
+            const options = (legalMoves[selected] || [])
+                .filter(uci => uci.slice(2, 4) === name);
+
+            if (options.length === 0) {
+                // Clicking another of your own pieces picks that one up
+                // instead of being treated as an illegal move
+                selected = legalMoves[name] ? name : null;
+                showSelection();
+                return;
+            }
+
+            const uci = options.length === 1 ? options[0] : choosePromotion(options);
+            selected = null;
+            showSelection();
+            if (uci) {
+                sendMove(uci);
+            }
+        }
+
+        function choosePromotion(options) {
+            // Several moves share a destination only when a pawn is
+            // promoting, and the piece has to come from the player
+            const answer = prompt('Promote to q, r, b or n?', 'q');
+            if (answer === null) {
+                return null;
+            }
+            const wanted = options.find(uci => uci.endsWith(answer.trim().toLowerCase()));
+            if (!wanted) {
+                alert('Pick one of q, r, b or n');
+            }
+            return wanted || null;
+        }
+
+        function sendMove(uci) {
+            // Locked while the engine replies, so a second click cannot
+            // queue a move onto a position that is about to change
+            document.getElementById('board').dataset.locked = '1';
+            return fetch('/human_move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({move: uci})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        delete document.getElementById('board').dataset.locked;
+                        return updateBoard();
+                    }
+                    return updateBoard().then(() => makeMove());
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent =
+                        'Could not send the move: ' + error;
+                })
+                .finally(() => {
+                    delete document.getElementById('board').dataset.locked;
+                    wireBoard();
+                });
         }
 
         function toggleMode() {
