@@ -735,6 +735,47 @@ def takeback():
     return jsonify({'success': True, 'undone': undone})
 
 
+@app.route('/set_position', methods=['POST'])
+def set_position():
+    """Start from a given FEN rather than the opening position
+
+    Useful for practising an endgame or checking what the engine does in
+    one particular position, neither of which is reachable by playing from
+    the start.
+    """
+    global game_board, move_history, last_engine_info
+
+    data = request.get_json(silent=True) or {}
+    fen = str(data.get('fen', '')).strip()
+    if not fen:
+        return jsonify({'error': 'No position given'}), 400
+
+    try:
+        board = chess.Board(fen)
+    except ValueError as exc:
+        return jsonify({'error': f'Could not read that position: {exc}'}), 400
+
+    # A position with no king, or with the side not to move already in
+    # check, is not one any game can reach, and the search assumes it will
+    # never see one
+    if not board.is_valid():
+        # The flag names read as NO_WHITE_KING or OPPOSITE_CHECK, which say
+        # what is wrong once the enum decoration is stripped off
+        reasons = ', '.join(
+            flag.name.lower().replace('_', ' ')
+            for flag in chess.Status
+            if flag.name != 'VALID' and flag & board.status()
+        )
+        return jsonify({'error': f'That position is not legal: {reasons}'}), 400
+
+    with board_lock:
+        game_board = board
+        move_history = []
+        last_engine_info = None
+
+    return jsonify({'success': True, 'fen': board.fen()})
+
+
 @app.route('/new_game', methods=['POST'])
 def new_game():
     with board_lock:
