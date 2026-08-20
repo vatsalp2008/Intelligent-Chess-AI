@@ -11,9 +11,11 @@ Run with:
     python3 -m unittest test_web_play
 """
 
+import io
 import unittest
 
 import chess
+import chess.pgn
 
 import simple_web_chess as web
 
@@ -270,6 +272,87 @@ class TestBoardReport(PlayTestCase):
 
     def test_the_status_names_the_bots_when_watching(self):
         self.assertIn('Random', self.board()['status'])
+
+
+class TestPgnExport(PlayTestCase):
+    """A game is only worth playing if it can be taken away and studied"""
+
+    def pgn(self):
+        response = self.client.get('/pgn')
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    def parsed(self):
+        return chess.pgn.read_game(io.StringIO(self.pgn()))
+
+    def test_it_is_offered_as_a_file(self):
+        headers = self.client.get('/pgn').headers
+        self.assertIn('chess-pgn', headers['Content-Type'])
+        self.assertIn('attachment', headers['Content-Disposition'])
+        self.assertIn('.pgn', headers['Content-Disposition'])
+
+    def test_a_game_that_has_not_started_is_still_valid(self):
+        self.assertIsNotNone(self.parsed())
+
+    def test_it_reads_back_as_the_same_position(self):
+        self.play()
+        for uci in ('e2e4', 'd2d4', 'g1f3'):
+            self.send(uci)
+            self.client.post('/move')
+        self.assertEqual(self.parsed().end().board().fen(), web.game_board.fen())
+
+    def test_the_moves_are_numbered_from_one(self):
+        self.play()
+        self.send('e2e4')
+        self.assertIn('1. e4', self.pgn())
+
+    def test_it_names_you_when_you_are_playing(self):
+        self.play()
+        self.assertEqual(self.parsed().headers['White'], 'Human')
+
+    def test_it_names_the_bot_when_watching(self):
+        self.assertEqual(self.parsed().headers['White'], 'Random bot')
+
+    def test_black_is_always_the_engine(self):
+        self.assertEqual(self.parsed().headers['Black'], 'Knightmare')
+
+    def test_an_unfinished_game_has_no_result(self):
+        self.play()
+        self.send('e2e4')
+        self.assertEqual(self.parsed().headers['Result'], '*')
+
+    def test_a_finished_game_records_who_won(self):
+        for uci in ('f2f3', 'e7e5', 'g2g4', 'd8h4'):
+            web.game_board.push(chess.Move.from_uci(uci))
+        self.assertEqual(self.parsed().headers['Result'], '0-1')
+
+    def test_a_position_set_up_by_hand_carries_its_fen(self):
+        """The moves alone would not reproduce where the game started"""
+        fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1'
+        web.game_board = chess.Board(fen)
+        web.game_board.push(chess.Move.from_uci('e2e4'))
+        game = self.parsed()
+        self.assertEqual(game.headers['FEN'], fen)
+        self.assertEqual(game.headers['SetUp'], '1')
+        self.assertEqual(game.end().board().fen(), web.game_board.fen())
+
+    def test_a_normal_game_carries_no_fen(self):
+        self.assertNotIn('FEN', self.parsed().headers)
+
+    def test_long_games_are_wrapped(self):
+        """The PGN standard asks for lines of at most 80 characters"""
+        board = web.game_board
+        for _ in range(30):
+            board.push(next(iter(board.legal_moves)))
+        for line in self.pgn().splitlines():
+            self.assertLessEqual(len(line), 80, line)
+
+    def test_the_board_is_not_disturbed_by_exporting(self):
+        self.play()
+        self.send('e2e4')
+        before = web.game_board.fen()
+        self.pgn()
+        self.assertEqual(web.game_board.fen(), before)
 
 
 if __name__ == '__main__':
