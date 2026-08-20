@@ -26,6 +26,10 @@ import simple_web_chess as web
 class TestConcurrentMoves(unittest.TestCase):
     def setUp(self):
         self.client = web.app.test_client()
+        # These tests expect both sides to be played by bots. A new game
+        # does not change the mode, so say so rather than inheriting
+        # whatever the last suite left behind.
+        web.mode = web.WATCH_MODE
         self.client.post("/new_game")
 
     def play_concurrently(self, count):
@@ -81,6 +85,10 @@ class TestConcurrentMoves(unittest.TestCase):
 class TestSequentialMoves(unittest.TestCase):
     def setUp(self):
         self.client = web.app.test_client()
+        # These tests expect both sides to be played by bots. A new game
+        # does not change the mode, so say so rather than inheriting
+        # whatever the last suite left behind.
+        web.mode = web.WATCH_MODE
         self.client.post("/new_game")
 
     def test_a_single_move_is_played(self):

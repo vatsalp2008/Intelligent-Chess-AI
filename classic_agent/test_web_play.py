@@ -26,6 +26,12 @@ class PlayTestCase(unittest.TestCase):
         web.mode = web.WATCH_MODE
         web.reset_game()
 
+    def tearDown(self):
+        # The mode is module state shared with every other suite, so a
+        # test that leaves it in play mode makes those fail instead
+        web.mode = web.WATCH_MODE
+        web.reset_game()
+
     def play(self):
         return self.client.post('/set_mode', json={'mode': 'play'})
 
