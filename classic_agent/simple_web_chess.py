@@ -4,8 +4,9 @@ Simple Web Chess Interface - Direct Integration
 Works directly with the Knightmare bot code without UCI
 """
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, Response, render_template_string, jsonify, request
 import argparse
+import datetime
 import threading
 
 import chess
@@ -627,6 +628,69 @@ def human_move():
         move_history.append(f"You: {san}")
 
     return jsonify({'success': True, 'san': san})
+
+
+def game_pgn(board, white, black):
+    """The game so far as PGN
+
+    Written out by hand rather than through chess.pgn, so that the only
+    dependency stays python-chess itself and the headers can name whoever
+    actually played. A game loaded from a FEN records that FEN, since the
+    moves alone would not reproduce the position.
+    """
+    start = board.root()
+    headers = [
+        ('Event', 'Knightmare web interface'),
+        ('Site', 'local'),
+        ('Date', datetime.date.today().strftime('%Y.%m.%d')),
+        ('White', white),
+        ('Black', black),
+        ('Result', board.result(claim_draw=True)),
+    ]
+    if start.fen() != chess.STARTING_FEN:
+        headers.extend([('SetUp', '1'), ('FEN', start.fen())])
+
+    lines = [f'[{key} "{value}"]' for key, value in headers]
+    lines.append('')
+
+    # Replay from the root so each move can be named the way a player
+    # would write it, which depends on the position it is played from
+    scratch = start.copy(stack=False)
+    text = []
+    for move in board.move_stack:
+        if scratch.turn == chess.WHITE:
+            text.append(f'{scratch.fullmove_number}.')
+        text.append(scratch.san(move))
+        scratch.push(move)
+    text.append(board.result(claim_draw=True))
+
+    # Wrapped at 80 columns, as the PGN standard asks for
+    wrapped = []
+    row = ''
+    for token in text:
+        if row and len(row) + 1 + len(token) > 80:
+            wrapped.append(row)
+            row = token
+        else:
+            row = f'{row} {token}'.strip()
+    if row:
+        wrapped.append(row)
+
+    return '\n'.join(lines + wrapped) + '\n'
+
+
+@app.route('/pgn')
+def download_pgn():
+    """The current game as a PGN file"""
+    with board_lock:
+        white = 'Human' if mode == PLAY_MODE else 'Random bot'
+        text = game_pgn(game_board, white, 'Knightmare')
+
+    return Response(
+        text,
+        mimetype='application/x-chess-pgn',
+        headers={'Content-Disposition': 'attachment; filename=knightmare.pgn'},
+    )
 
 
 @app.route('/takeback', methods=['POST'])
