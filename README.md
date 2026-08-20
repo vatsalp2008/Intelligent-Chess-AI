@@ -198,11 +198,13 @@ overshoot after the change, over a range of budgets and positions:
 | Baseline | unbounded (28x seen)   | 1.2x  |
 
 What remains is the fixed cost of the mate scan that runs before any
-searching, plus up to one clock-check interval. At a fixed depth, where
-the deadline never fires, self play shows no change in strength (54% over
-24 games). At a fixed time it scores slightly lower, which is the point:
-the old engine was winning those games by using more time than it was
-given.
+searching, plus up to one clock-check interval.
+
+Strength is unchanged as far as these sample sizes can tell: 54% at a
+fixed depth over 24 games, where the deadline never fires at all, and 38%
+at 0.3s a move and 54% at 0.5s a move over 24 and 12 games. Those last two
+straddle even, which is what a sample this size looks like when there is
+nothing to find.
 
 ### Usage
 
