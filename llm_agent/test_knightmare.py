@@ -343,19 +343,25 @@ class TestTimeBudget(unittest.TestCase):
 
     BUSY_FEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
 
-    # Starting an iteration can overshoot, so allow some slack
-    TOLERANCE = 2.5
+    # Slack for the last clock check interval and the fixed cost of the
+    # mate scan before any searching starts. This was a 2.5x multiplier,
+    # which is both too loose to catch anything at a large budget and too
+    # tight at a small one, because the overshoot is a fixed cost rather
+    # than a proportional one. It still failed under load at 28 seconds
+    # for a one second budget, because nothing stopped a started
+    # iteration; now the search itself watches the clock.
+    SLACK_SECONDS = 0.5
 
-    def budget_check(self, budget):
+    def budget_check(self, budget, max_depth=6):
         board = chess.Board(self.BUSY_FEN)
         bot = KnightmareFast()
 
         start = time.time()
-        move = bot.get_best_move(board, budget, 6)
+        move = bot.get_best_move(board, budget, max_depth)
         elapsed = time.time() - start
 
         self.assertIn(move, board.legal_moves)
-        self.assertLess(elapsed, budget * self.TOLERANCE,
+        self.assertLess(elapsed, budget + self.SLACK_SECONDS,
                         f"took {elapsed:.2f}s for a {budget}s budget")
 
     def test_short_budget_is_respected(self):
@@ -367,6 +373,23 @@ class TestTimeBudget(unittest.TestCase):
     def test_a_move_comes_back_on_a_tiny_budget(self):
         board = chess.Board(self.BUSY_FEN)
         self.assertIn(KnightmareFast().get_best_move(board, 0.01, 6), board.legal_moves)
+
+    def test_a_deep_limit_cannot_run_away(self):
+        """With room to reach an expensive depth, only the clock stops it"""
+        self.budget_check(0.5, max_depth=12)
+
+    def test_the_deadline_is_released_afterwards(self):
+        board = chess.Board(self.BUSY_FEN)
+        bot = KnightmareFast()
+        bot.get_best_move(board, 0.2, 12)
+        self.assertIsNone(bot.deadline)
+
+    def test_the_board_survives_an_abandoned_search(self):
+        """Unwinding out of the search skips the matching pops"""
+        board = chess.Board(self.BUSY_FEN)
+        before = board.fen()
+        KnightmareFast().get_best_move(board, 0.3, 12)
+        self.assertEqual(board.fen(), before)
 
     def test_depth_limit_is_honoured(self):
         board = chess.Board(self.BUSY_FEN)
