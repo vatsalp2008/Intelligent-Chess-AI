@@ -458,6 +458,12 @@ def make_move():
         if game_board.is_game_over():
             return jsonify({'error': 'Game is over'})
 
+        # In play mode White belongs to the person, so this endpoint must
+        # not move for them. Without the guard the random bot answers on
+        # their behalf and they never get a turn.
+        if human_to_move():
+            return jsonify({'error': 'Waiting for your move'}), 409
+
         try:
             # Determine whose turn it is
             if game_board.turn == chess.WHITE:
