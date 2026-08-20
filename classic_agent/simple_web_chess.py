@@ -112,6 +112,14 @@ HTML = """
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
+        #fen {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 12px;
+        }
         .controls {
             background: white;
             padding: 20px;
@@ -212,6 +220,10 @@ HTML = """
             <button onclick="toggleMode()" id="mode-btn">Mode: Watch</button>
             <button onclick="takeBack()" id="undo-btn">Take Back</button>
             <button onclick="savePgn()">Save PGN</button>
+
+            <h3>Set Up A Position</h3>
+            <input type="text" id="fen" placeholder="Paste a FEN" />
+            <button onclick="loadFen()">Load</button>
 
             <h3>Move History</h3>
             <div id="moves"></div>
@@ -473,6 +485,27 @@ HTML = """
                         alert(data.error);
                         return;
                     }
+                    selected = null;
+                    return updateBoard();
+                });
+        }
+
+        function loadFen() {
+            const box = document.getElementById('fen');
+            fetch('/set_position', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({fen: box.value})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    // Show the position as the library writes it, which is
+                    // not always exactly what was pasted in
+                    box.value = data.fen;
                     selected = null;
                     return updateBoard();
                 });
