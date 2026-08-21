@@ -429,6 +429,9 @@ class KnightmareBot:
         # Per instance rather than a module constant, so a host can size
         # the table for the machine it is running on
         self.tt_limit = TT_MAX_ENTRIES
+        # Hosts running an opening book of their own want the engine's own
+        # book out of the way, so that the book being tested is theirs
+        self.use_book = True
 
     def store_tt(self, key, score, move, flag):
         """Cache a search result, skipping values that do not travel well
@@ -956,7 +959,7 @@ class KnightmareBot:
 
         # Known theory, consulted only after the mate check above so the
         # book can never talk the engine out of a forced win
-        opening = book_move(board, self.opening_book)
+        opening = book_move(board, self.opening_book) if self.use_book else None
         if opening is not None:
             print(f"info string book move {opening.uci()}", flush=True)
             return opening
