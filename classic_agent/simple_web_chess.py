@@ -749,7 +749,9 @@ def takeback():
             undone += 1
             if move_history:
                 move_history.pop()
-            if game_board.turn == chess.WHITE:
+            # Your own side, not White: as Black this would otherwise stop
+            # one move early and leave the engine to move
+            if game_board.turn == human_colour:
                 break
 
         # The line the engine reported was for a position that no longer
