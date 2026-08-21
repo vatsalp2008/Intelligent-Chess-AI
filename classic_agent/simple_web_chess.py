@@ -738,7 +738,16 @@ def takeback():
         if mode != PLAY_MODE:
             return jsonify({'error': 'Takeback is only for a game you are playing'}), 400
 
-        if not game_board.move_stack:
+        # Counted rather than just checking the stack is non-empty: as
+        # Black the stack can hold only the engine's opening move, and
+        # unwinding that leaves an empty board with the engine to move
+        # and nothing prompting it to play.
+        root_turn = game_board.root().turn
+        yours = sum(
+            1 for index in range(len(game_board.move_stack))
+            if (root_turn if index % 2 == 0 else not root_turn) == human_colour
+        )
+        if not yours:
             return jsonify({'error': 'No moves to take back'}), 400
 
         undone = 0
