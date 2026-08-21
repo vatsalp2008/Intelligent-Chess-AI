@@ -173,6 +173,32 @@ Keeping these on record saves re-deriving them:
 Two parameters were checked and left alone: `QUIESCENCE_DEPTH` 4 beat both 2
 and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3.
 
+### Options
+
+`uci` advertises what a host may set, and `setoption` applies it. An option
+that is not advertised can never be set, so the advertised list is derived
+from the same table the code honours.
+
+| Option    | Type  | Default | Effect                                     |
+| --------- | ----- | ------- | ------------------------------------------ |
+| `Hash`    | spin  | 38      | Transposition table size in megabytes      |
+| `OwnBook` | check | true    | Whether to consult the built-in book       |
+
+The table is capped by entry count rather than by bytes, so `Hash` is
+converted at roughly 200 bytes per entry — a key tuple, a score, a move and
+a flag. The advertised default is derived from the table size the engine
+actually uses, so a host that sets nothing gets what it was promised.
+Shrinking `Hash` clears the table rather than leaving entries that no
+longer fit. Settings survive `ucinewgame`, because a host sets them once
+after `uci` and does not repeat them between games.
+
+`OwnBook false` matters when the host supplies a book of its own: without
+it, the first few moves come from this engine's book and whatever the host
+is trying to test never gets played.
+
+An unknown option name is reported on an `info string` rather than ignored,
+so a host that has misspelled one can see that its setting did nothing.
+
 ### Time control
 
 `go` understands `movetime`, `depth`, `infinite`, and the usual
