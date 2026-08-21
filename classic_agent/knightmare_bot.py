@@ -1149,6 +1149,33 @@ def option_lines():
     return lines
 
 
+def parse_setoption(line):
+    """The (name, value) a setoption command carries, or None
+
+    The wire format is `setoption name <name> [value <value>]`, and both
+    parts may contain spaces, so this splits on the keywords rather than on
+    whitespace. A name with no value is a button, which this engine has
+    none of, so it comes back with a value of None.
+    """
+    parts = line.split()
+    if len(parts) < 3 or parts[0] != "setoption" or parts[1] != "name":
+        return None
+
+    if "value" in parts[3:]:
+        # Searched from past the first name token, so an option actually
+        # called "value" keeps its name instead of truncating to nothing
+        split_at = parts.index("value", 3)
+        name = " ".join(parts[2:split_at])
+        value = " ".join(parts[split_at + 1:])
+    else:
+        name = " ".join(parts[2:])
+        value = None
+
+    if not name:
+        return None
+    return name, value
+
+
 def parse_go(line, white_to_move=True):
     """Work out a (time_limit_seconds, max_depth) budget for a go command"""
     parts = line.split()
