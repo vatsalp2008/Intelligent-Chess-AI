@@ -65,6 +65,18 @@ def ask_move(bot, board, depth):
         return bot.get_best_move(board, NO_TIME_LIMIT)
 
 
+def disable_book(bot):
+    """Turn off a bot's opening book if it has one
+
+    The book picks between replies at random, so leaving it on makes the
+    result irreproducible: the classic engine played against an identical
+    copy of itself scored 54%, 54% and 50% over the same twelve games with
+    the book on, and exactly 50% every time with it off.
+    """
+    if hasattr(bot, "use_book"):
+        bot.use_book = False
+
+
 def play_game(white_bot, black_bot, opening, depth):
     """Play one game and return a PGN style result string"""
     board = chess.Board()
@@ -86,7 +98,8 @@ def play_game(white_bot, black_bot, opening, depth):
     return "1/2-1/2"
 
 
-def run_match(new_module, old_module, depth, verbose=True, max_games=None):
+def run_match(new_module, old_module, depth, verbose=True, max_games=None,
+              use_book=False):
     """Play openings from both sides, returning (new_score, games)
 
     max_games stops early, which is useful when a full match is too slow to
@@ -102,6 +115,9 @@ def run_match(new_module, old_module, depth, verbose=True, max_games=None):
             games += 1
             new_bot = new_module.KnightmareFast()
             old_bot = old_module.KnightmareFast()
+            if not use_book:
+                disable_book(new_bot)
+                disable_book(old_bot)
 
             if new_is_white:
                 result = play_game(new_bot, old_bot, opening, depth)
@@ -135,6 +151,8 @@ def parse_args():
     parser.add_argument("--games", type=int, default=None, metavar="N",
                         help="stop after N games instead of playing them all")
     parser.add_argument("--quiet", action="store_true", help="only print the final score")
+    parser.add_argument("--book", action="store_true",
+                        help="leave the opening books on (results stop being reproducible)")
     return parser.parse_args()
 
 
@@ -144,11 +162,13 @@ def main():
     new_module = load_engine("knightmare.py", "engine_new")
     old_module = load_engine(args.baseline, "engine_old")
 
-    print(f"Current engine vs {args.baseline} at depth {args.depth}")
+    book = "book on" if args.book else "book off"
+    print(f"Current engine vs {args.baseline} at depth {args.depth}, {book}")
     print("=" * 60)
 
     score, games = run_match(new_module, old_module, args.depth,
-                             verbose=not args.quiet, max_games=args.games)
+                             verbose=not args.quiet, max_games=args.games,
+                             use_book=args.book)
 
     print("=" * 60)
     percent = 100 * score / games
