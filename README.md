@@ -242,13 +242,24 @@ python simple_web_chess.py --port 8080      # pick another port
 ```
 
 The interface opens in Watch mode, where the random bot and Knightmare play
-each other. **Mode** switches to playing Knightmare yourself, as White:
-click a piece to see where it can go, then click a square to move there.
-Switching mode starts a new game, since carrying a half-played position
-across would leave the side you just took over having already moved.
+each other. **Mode** switches to playing Knightmare yourself: click a piece
+to see where it can go, then click a square to move there. **Play As**
+picks your side — take Black and the engine opens, and the board is drawn
+from your side, as every chess interface does. Knightmare is the opponent
+whichever colour you take; picking the engine by colour would have handed
+you the random bot as soon as you chose Black.
+
+Switching mode or colour starts a new game, since carrying a half-played
+position across would leave the side you just took over having already
+moved. The last move played and a king in check are both marked on the
+board, because otherwise the engine's reply has to be found by comparing
+the position against what it looked like a moment ago.
 
 **Take Back** unwinds a whole move pair rather than a single move, because
-undoing only your own would just let the engine play again. **Save PGN**
+undoing only your own would just let the engine play again. It stops at
+your own turn rather than at White's, and refuses to unwind the engine's
+opening move when you are Black, which would leave an empty board with the
+engine to move and nothing prompting it to play. **Save PGN**
 downloads the game, and pasting a FEN into the box below sets the board up
 from that position — useful for practising an endgame the opening never
 reaches. An illegal position is refused with the reason.
