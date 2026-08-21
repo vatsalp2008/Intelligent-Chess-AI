@@ -611,6 +611,7 @@ def get_board():
             'white_to_move': game_board.turn == chess.WHITE,
             'engine': last_engine_info,
             'mode': mode,
+            'colour': 'white' if human_colour == chess.WHITE else 'black',
             'your_turn': human_to_move(),
             # Legal moves grouped by origin square, so the interface can
             # highlight where a piece may go without knowing the rules
@@ -624,18 +625,29 @@ def set_mode():
     Changing mode starts a new game: carrying a half-played position across
     would leave the side you just took over having already moved.
     """
-    global mode
+    global mode, human_colour
 
     data = request.get_json(silent=True) or {}
     requested = data.get('mode', WATCH_MODE)
     if requested not in (WATCH_MODE, PLAY_MODE):
         return jsonify({'error': f'unknown mode {requested!r}'}), 400
 
+    # Named rather than a boolean, so the request reads the way a person
+    # would say it and a typo is caught instead of silently meaning Black
+    wanted = str(data.get('colour', 'white')).strip().lower()
+    if wanted not in ('white', 'black'):
+        return jsonify({'error': f'unknown colour {wanted!r}'}), 400
+
     with board_lock:
         mode = requested
+        human_colour = chess.WHITE if wanted == 'white' else chess.BLACK
         reset_game()
 
-    return jsonify({'success': True, 'mode': mode})
+    return jsonify({
+        'success': True,
+        'mode': mode,
+        'colour': 'white' if human_colour == chess.WHITE else 'black',
+    })
 
 
 @app.route('/human_move', methods=['POST'])
@@ -788,15 +800,20 @@ def make_move():
         if game_board.is_game_over():
             return jsonify({'error': 'Game is over'})
 
-        # In play mode White belongs to the person, so this endpoint must
-        # not move for them. Without the guard the random bot answers on
-        # their behalf and they never get a turn.
+        # One side belongs to the person in play mode, so this endpoint
+        # must not move for them. Without the guard a bot answers on their
+        # behalf and they never get a turn.
         if human_to_move():
             return jsonify({'error': 'Waiting for your move'}), 409
 
         try:
-            # Determine whose turn it is
-            if game_board.turn == chess.WHITE:
+            if mode == PLAY_MODE:
+                # Knightmare is the opponent whichever side you took, so
+                # picking the engine by colour would hand you the random
+                # bot as soon as you chose Black
+                move = get_knightmare_move(game_board)
+                player = "Knightmare"
+            elif game_board.turn == chess.WHITE:
                 # Random bot plays White
                 move = get_random_move(game_board)
                 player = "Random"
