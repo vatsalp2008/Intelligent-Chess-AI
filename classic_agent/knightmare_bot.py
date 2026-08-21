@@ -426,6 +426,9 @@ class KnightmareBot:
         self.history_table = {}
         self.transposition_table = {}
         self.opening_book = build_opening_book()
+        # Per instance rather than a module constant, so a host can size
+        # the table for the machine it is running on
+        self.tt_limit = TT_MAX_ENTRIES
 
     def store_tt(self, key, score, move, flag):
         """Cache a search result, skipping values that do not travel well
@@ -435,7 +438,7 @@ class KnightmareBot:
         """
         if abs(score) >= MATE_SCORE - MAX_PLY:
             return
-        if len(self.transposition_table) >= TT_MAX_ENTRIES:
+        if len(self.transposition_table) >= self.tt_limit:
             return
         self.transposition_table[key] = (score, move, flag)
 
@@ -970,7 +973,7 @@ class KnightmareBot:
                 for key, value in self.history_table.items()
                 if value > 1
             }
-        if len(self.transposition_table) >= TT_MAX_ENTRIES:
+        if len(self.transposition_table) >= self.tt_limit:
             self.transposition_table.clear()
         self.killer_moves.clear()  # Clear each search
 
