@@ -54,6 +54,35 @@ def test_bot(bot_path, test_name):
         else:
             print("✗ UCI handshake failed")
             return False
+
+        # An option a host cannot see is one it can never set, so the
+        # advertised list is part of the handshake rather than a detail
+        options = [r for r in response if r.startswith("option name ")]
+        if options:
+            print(f"✓ Advertises {len(options)} option(s)")
+            for line in options:
+                if " type " not in line or " default " not in line:
+                    print(f"✗ Malformed option line: {line}")
+                    return False
+        else:
+            print("  (no options advertised)")
+
+        # Setting one must be acknowledged. Silently swallowing it leaves a
+        # host that misspelled a name with no sign anything went wrong.
+        print("Test 1b: setoption")
+        proc.stdin.write("setoption name OwnBook value false\n")
+        proc.stdin.flush()
+        time.sleep(0.3)
+        proc.stdin.write("isready\n")
+        proc.stdin.flush()
+        time.sleep(0.3)
+
+        response = read_until("readyok")
+        if any("readyok" in r for r in response):
+            print("✓ Survives setoption")
+        else:
+            print("✗ Stopped responding after setoption")
+            return False
         
         # Test 2: Ready check
         print("Test 2: Ready check")
