@@ -1108,6 +1108,47 @@ def clock_budget(parts, white_to_move):
     return max(0.05, min(budget_ms / 1000.0, MAX_MOVE_TIME))
 
 
+# The table is capped by entry count rather than by bytes, so a Hash value
+# in megabytes has to be turned into a number of entries. Roughly 200 bytes
+# per entry: a key tuple, a score, a move and a flag.
+BYTES_PER_TT_ENTRY = 200
+
+
+def hash_mb_to_entries(megabytes):
+    """How many table entries fit in the given number of megabytes"""
+    return max(1, int(megabytes * 1024 * 1024 / BYTES_PER_TT_ENTRY))
+
+
+def entries_to_hash_mb(entries):
+    """The Hash setting matching an entry count, rounded to whole megabytes"""
+    return max(1, round(entries * BYTES_PER_TT_ENTRY / (1024 * 1024)))
+
+
+# The options a host may set, as (name, uci type, default, min, max).
+# A UCI host only offers what the engine advertises here, so an option
+# that is not listed can never be set even if the code would honour it.
+#
+# The Hash default is derived from the table size the engine actually uses,
+# so a host that sets nothing gets what was advertised.
+UCI_OPTIONS = [
+    ("Hash", "spin", entries_to_hash_mb(TT_MAX_ENTRIES), 1, 1024),
+    ("OwnBook", "check", True, None, None),
+]
+
+
+def option_lines():
+    """The `option` lines to send in reply to `uci`"""
+    lines = []
+    for name, kind, default, low, high in UCI_OPTIONS:
+        text = f"option name {name} type {kind}"
+        if kind == "check":
+            text += f" default {str(default).lower()}"
+        else:
+            text += f" default {default} min {low} max {high}"
+        lines.append(text)
+    return lines
+
+
 def parse_go(line, white_to_move=True):
     """Work out a (time_limit_seconds, max_depth) budget for a go command"""
     parts = line.split()
@@ -1200,6 +1241,8 @@ def main():
             if line == "uci":
                 print("id name Knightmare Reliable")
                 print("id author Vatsal Patel")
+                for option in option_lines():
+                    print(option)
                 print("uciok")
                 sys.stdout.flush()
             
