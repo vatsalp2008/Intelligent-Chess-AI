@@ -40,6 +40,10 @@ WATCH_MODE = "watch"
 PLAY_MODE = "play"
 mode = WATCH_MODE
 
+# Which side the person is playing when the mode is play. Stored rather
+# than assumed to be White, so the engine can be given the first move.
+human_colour = chess.WHITE
+
 def reset_game():
     global game_board, move_history, knightmare, last_engine_info
     game_board = chess.Board()
@@ -51,7 +55,7 @@ def reset_game():
 
 def human_to_move():
     """True when the interface is waiting for a person rather than a bot"""
-    return mode == PLAY_MODE and game_board.turn == chess.WHITE
+    return mode == PLAY_MODE and game_board.turn == human_colour
 
 
 def legal_by_origin(board):
@@ -590,7 +594,7 @@ def get_board():
             if mode == PLAY_MODE:
                 # Phrased as a prompt rather than "X to move", which reads
                 # oddly when the side to move is the person reading it
-                status = ("Your move" if game_board.turn == chess.WHITE
+                status = ("Your move" if human_to_move()
                           else "Knightmare is thinking...")
             else:
                 turn = ("White (Random)" if game_board.turn == chess.WHITE
@@ -673,8 +677,12 @@ def human_move():
 def download_pgn():
     """The current game as a PGN file"""
     with board_lock:
-        white = 'Human' if mode == PLAY_MODE else 'Random bot'
-        text = game_pgn(game_board, white, 'Knightmare')
+        if mode == PLAY_MODE:
+            white, black = (('Human', 'Knightmare') if human_colour == chess.WHITE
+                            else ('Knightmare', 'Human'))
+        else:
+            white, black = 'Random bot', 'Knightmare'
+        text = game_pgn(game_board, white, black)
 
     return Response(
         text,
