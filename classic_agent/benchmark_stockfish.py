@@ -22,7 +22,14 @@ Results are noisy: six games per rung produced 42/42/25 on one run and
 difference. Use the full opening set, and treat a single rung as a rough
 band rather than a precise number.
 
-Reference point, Knightmare at depth 3 over the full 12 game set:
+Part of that noise was our own opening book, which picks between replies at
+random: the same engine played against an identical copy of itself scored
+54%, 54% and 50% with the book on, and exactly 50% with it off. Our book is
+off by default here for the same reason, so the reference below is not
+directly comparable to a run with --book.
+
+Reference point, Knightmare at depth 3 over the full 12 game set. Measured
+with the book on, so it carries several points of that noise:
 
     Stockfish depth 2   46%
 """

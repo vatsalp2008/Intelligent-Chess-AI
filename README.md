@@ -135,7 +135,10 @@ python benchmark_stockfish.py --ladder
 
 Knightmare at depth 3 scores around 46% against Stockfish limited to depth
 2. Six games per rung turned out to be far too noisy to compare rungs, so
-the default is the full twelve game set.
+the default is the full twelve game set. That 46% was measured with our own
+book on, so it carries a few points of the noise described above; the book
+is off by default here now, which makes new runs steadier but not directly
+comparable to that figure.
 
 `tactics.py` complements both: each position has one clearly correct move,
 so a failure names the specific weakness rather than just a lower score.
