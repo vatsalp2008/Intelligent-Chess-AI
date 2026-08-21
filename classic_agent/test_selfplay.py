@@ -11,7 +11,9 @@ Run with:
     python3 -m unittest test_selfplay
 """
 
+import types
 import unittest
+import unittest.mock
 
 import chess
 
@@ -173,6 +175,70 @@ class TestOpenings(unittest.TestCase):
     def test_openings_are_distinct(self):
         sequences = [tuple(moves) for _, moves in selfplay.OPENINGS]
         self.assertEqual(len(sequences), len(set(sequences)))
+
+
+class TestDisableBook(unittest.TestCase):
+    """The book picks at random, so a measurement with it on is not repeatable"""
+
+    def test_it_turns_a_book_off(self):
+        bot = selfplay.load_engine("knightmare_bot.py", "book_check").KnightmareBot()
+        self.assertTrue(bot.use_book)
+        selfplay.disable_book(bot)
+        self.assertFalse(bot.use_book)
+
+    def test_a_bot_with_no_book_is_left_alone(self):
+        """Older engines have no such setting to turn off"""
+
+        class Bookless:
+            pass
+
+        bot = Bookless()
+        selfplay.disable_book(bot)
+        self.assertFalse(hasattr(bot, "use_book"))
+
+    def test_a_match_disables_both_engines_books(self):
+        seen = []
+
+        class Recorder:
+            """Stands in for an engine, recording the setting it was given"""
+
+            def __init__(self):
+                self.use_book = True
+
+            def get_move(self, board, seconds, depth):
+                seen.append(self.use_book)
+                return next(iter(board.legal_moves), None)
+
+        module = types.SimpleNamespace(KnightmareBot=Recorder)
+        selfplay.run_match(module, module, depth=1, verbose=False, max_games=1)
+        self.assertTrue(seen)
+        self.assertNotIn(True, seen)
+
+    def test_a_match_can_be_asked_to_keep_them(self):
+        seen = []
+
+        class Recorder:
+            def __init__(self):
+                self.use_book = True
+
+            def get_move(self, board, seconds, depth):
+                seen.append(self.use_book)
+                return next(iter(board.legal_moves), None)
+
+        module = types.SimpleNamespace(KnightmareBot=Recorder)
+        selfplay.run_match(module, module, depth=1, verbose=False, max_games=1,
+                           use_book=True)
+        self.assertTrue(seen)
+        self.assertNotIn(False, seen)
+
+    def test_the_flag_defaults_to_off(self):
+        """Measuring is the normal case, so it should not need the flag"""
+        with unittest.mock.patch("sys.argv", ["selfplay.py", "old.py"]):
+            self.assertFalse(selfplay.parse_args().book)
+
+    def test_the_flag_can_be_asked_for(self):
+        with unittest.mock.patch("sys.argv", ["selfplay.py", "old.py", "--book"]):
+            self.assertTrue(selfplay.parse_args().book)
 
 
 if __name__ == "__main__":
