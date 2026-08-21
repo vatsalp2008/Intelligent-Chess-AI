@@ -221,6 +221,7 @@ HTML = """
             <button onclick="makeMove()">Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">Auto Play: OFF</button>
             <button onclick="toggleMode()" id="mode-btn">Mode: Watch</button>
+            <button onclick="swapColour()" id="colour-btn">Play As: White</button>
             <button onclick="takeBack()" id="undo-btn">Take Back</button>
             <button onclick="savePgn()">Save PGN</button>
 
@@ -237,6 +238,7 @@ HTML = """
         let autoPlay = false;
         let autoTimer = null;
         let playMode = false;
+        let myColour = 'white';
         let legalMoves = {};
         let selected = null;
 
@@ -256,8 +258,9 @@ HTML = """
 
                     // The server owns the mode: a reload would otherwise
                     // show Watch while a game against a person is running
-                    if (playMode !== (data.mode === 'play')) {
+                    if (playMode !== (data.mode === 'play') || myColour !== data.colour) {
                         playMode = data.mode === 'play';
+                        myColour = data.colour;
                         showMode();
                     }
 
@@ -463,10 +466,21 @@ HTML = """
             // a move already in flight would land on the new position
             stopAuto();
             const wanted = playMode ? 'watch' : 'play';
+            requestMode(wanted, myColour);
+        }
+
+        function swapColour() {
+            // Changing sides restarts the game either way, so there is
+            // nothing to preserve by only switching when already playing
+            myColour = myColour === 'white' ? 'black' : 'white';
+            requestMode(playMode ? 'play' : 'watch', myColour);
+        }
+
+        function requestMode(wanted, colour) {
             fetch('/set_mode', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mode: wanted})
+                body: JSON.stringify({mode: wanted, colour: colour})
             })
                 .then(response => response.json())
                 .then(data => {
@@ -475,8 +489,15 @@ HTML = """
                         return;
                     }
                     playMode = data.mode === 'play';
+                    myColour = data.colour;
                     showMode();
-                    return updateBoard();
+                    // The engine has the first move when you take Black,
+                    // so ask for it rather than leaving an idle board
+                    return updateBoard().then(() => {
+                        if (playMode && myColour === 'black') {
+                            return makeMove();
+                        }
+                    });
                 });
         }
 
@@ -528,8 +549,18 @@ HTML = """
             document.getElementById('auto-btn').disabled = playMode;
             // There is no side of yours to take a move back for otherwise
             document.getElementById('undo-btn').disabled = !playMode;
+            const colourButton = document.getElementById('colour-btn');
+            colourButton.textContent =
+                'Play As: ' + (myColour === 'white' ? 'White' : 'Black');
+            colourButton.className = playMode ? 'active' : '';
+
+            const asWhite = playMode && myColour === 'white';
+            const asBlack = playMode && myColour === 'black';
             document.getElementById('white-player').textContent =
-                playMode ? '⚪ White: You' : '⚪ White: Random Bot';
+                asWhite ? '⚪ White: You'
+                        : (asBlack ? '⚪ White: Knightmare' : '⚪ White: Random Bot');
+            document.getElementById('black-player').textContent =
+                asBlack ? '⚫ Black: You' : '⚫ Black: Knightmare';
         }
 
         function toggleAuto() {
