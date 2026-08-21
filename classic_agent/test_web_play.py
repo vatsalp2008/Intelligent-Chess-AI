@@ -32,10 +32,18 @@ class PlayTestCase(unittest.TestCase):
         # The mode is module state shared with every other suite, so a
         # test that leaves it in play mode makes those fail instead
         web.mode = web.WATCH_MODE
+        web.human_colour = chess.WHITE
         web.reset_game()
 
-    def play(self):
-        return self.client.post('/set_mode', json={'mode': 'play'})
+    def play(self, colour='white'):
+        return self.client.post('/set_mode',
+                                json={'mode': 'play', 'colour': colour})
+
+    def any_legal(self):
+        """Any move available to you right now, as UCI"""
+        legal = self.board()['legal']
+        self.assertTrue(legal, 'no legal moves to choose from')
+        return sorted(legal.values())[0][0]
 
     def send(self, uci):
         return self.client.post('/human_move', json={'move': uci})
@@ -343,6 +351,113 @@ class TestSetPosition(PlayTestCase):
         self.load(self.ENDGAME)
         listed = sum(len(v) for v in self.board()['legal'].values())
         self.assertEqual(listed, web.game_board.legal_moves.count())
+
+
+class TestPlayingAsBlack(PlayTestCase):
+    """The interface assumed you were White in several places"""
+
+    def test_the_colour_is_accepted_and_reported(self):
+        self.assertEqual(self.play('black').get_json()['colour'], 'black')
+        self.assertEqual(self.board()['colour'], 'black')
+
+    def test_white_is_the_default(self):
+        self.assertEqual(self.play().get_json()['colour'], 'white')
+
+    def test_an_unknown_colour_is_refused(self):
+        response = self.client.post('/set_mode',
+                                    json={'mode': 'play', 'colour': 'purple'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('purple', response.get_json()['error'])
+
+    def test_the_engine_moves_first(self):
+        self.play('black')
+        self.assertFalse(self.board()['your_turn'])
+        self.assertEqual(self.client.post('/move').get_json()['success'], True)
+        self.assertTrue(self.board()['your_turn'])
+
+    def test_the_opponent_is_the_engine_not_the_random_bot(self):
+        """Picking the bot by colour used to hand Black the random bot"""
+        self.play('black')
+        self.client.post('/move')
+        self.assertTrue(web.move_history[0].startswith('Knightmare:'))
+
+    def test_you_cannot_move_before_the_engine_has(self):
+        self.play('black')
+        self.assertEqual(self.send('e7e5').status_code, 400)
+
+    def test_you_can_move_once_it_has(self):
+        self.play('black')
+        self.client.post('/move')
+        self.assertEqual(self.send(self.any_legal()).status_code, 200)
+
+    def test_the_move_is_still_recorded_as_yours(self):
+        self.play('black')
+        self.client.post('/move')
+        self.send(self.any_legal())
+        self.assertTrue(web.move_history[-1].startswith('You: '))
+
+    def test_the_board_is_drawn_from_your_side(self):
+        """Every chess interface flips for Black"""
+        self.play('black')
+        self.assertIn('flipped', web.chess.svg.board.__doc__ or 'flipped')
+        black_view = self.board()['svg']
+        self.play('white')
+        white_view = self.board()['svg']
+        self.assertNotEqual(black_view, white_view)
+
+    def test_takeback_returns_the_turn_to_you(self):
+        """Stopping at White would leave the engine to move"""
+        self.play('black')
+        self.client.post('/move')
+        self.send(self.any_legal())
+        self.client.post('/move')
+        self.assertEqual(self.client.post('/takeback').get_json()['undone'], 2)
+        self.assertTrue(web.human_to_move())
+
+    def test_it_will_not_unwind_the_engine_s_opening_move(self):
+        """That would leave an empty board with the engine to move"""
+        self.play('black')
+        self.client.post('/move')
+        self.send(self.any_legal())
+        self.client.post('/move')
+        self.client.post('/takeback')
+
+        response = self.client.post('/takeback')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('No moves', response.get_json()['error'])
+        self.assertEqual(len(web.game_board.move_stack), 1)
+        self.assertTrue(web.human_to_move())
+
+    def test_nothing_of_yours_to_undo_is_refused(self):
+        self.play('black')
+        self.client.post('/move')
+        self.assertEqual(self.client.post('/takeback').status_code, 400)
+
+    def test_the_pgn_names_you_as_black(self):
+        self.play('black')
+        game = chess.pgn.read_game(io.StringIO(self.client.get('/pgn').get_data(as_text=True)))
+        self.assertEqual(game.headers['Black'], 'Human')
+        self.assertEqual(game.headers['White'], 'Knightmare')
+
+    def test_losing_says_you_lost(self):
+        """Naming the colour leaves you to work out which side you were"""
+        self.play('black')
+        # A back rank mate: Re8 covers f8 and h8, and the king's own
+        # pawns block the rest. 7k/5Q2/6K1 looks like a mate but is
+        # stalemate, because the king there is not attacked at all.
+        web.game_board = chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')
+        self.assertTrue(web.game_board.is_checkmate())
+        self.assertEqual(self.board()['status'], 'Checkmate - you lost')
+
+    def test_winning_says_you_won(self):
+        self.play('black')
+        web.game_board = chess.Board('rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3')
+        self.assertEqual(self.board()['status'], 'Checkmate - you win!')
+
+    def test_watching_still_names_the_bots(self):
+        # Black is the side mated here, so White is the side that wins
+        web.game_board = chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')
+        self.assertIn('White (Random)', self.board()['status'])
 
 
 class TestPgnExport(PlayTestCase):
