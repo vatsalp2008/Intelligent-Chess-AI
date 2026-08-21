@@ -96,7 +96,23 @@ def play_game(bot, engine, opening, our_colour, skill_depth):
     return 0.5
 
 
-def run_match(bot_factory, engine, level, skill_depth, games, verbose=True):
+def make_bot(bot_factory, use_book):
+    """An engine for one game, with its book set as asked
+
+    The book picks between replies at random, so leaving it on costs the
+    result several points of noise that have nothing to do with the engine's
+    strength, and spends the first five full moves of every game on book
+    moves rather than searched ones.
+    """
+    bot = bot_factory()
+    # Older engines have no such setting to turn off
+    if not use_book and hasattr(bot, "use_book"):
+        bot.use_book = False
+    return bot
+
+
+def run_match(bot_factory, engine, level, skill_depth, games, verbose=True,
+              use_book=False):
     """Play a match at one skill level, returning (score, games_played)"""
     engine.configure({"Skill Level": level})
 
@@ -109,7 +125,8 @@ def run_match(bot_factory, engine, level, skill_depth, games, verbose=True):
                 break
             played += 1
 
-            result = play_game(bot_factory(), engine, opening, our_colour, skill_depth)
+            result = play_game(make_bot(bot_factory, use_book), engine,
+                               opening, our_colour, skill_depth)
             score += result
 
             if verbose:
@@ -136,6 +153,8 @@ def parse_args():
     parser.add_argument("--ladder", action="store_true",
                         help="sweep several skill depths to find where we break even")
     parser.add_argument("--quiet", action="store_true", help="only print totals")
+    parser.add_argument("--book", action="store_true",
+                        help="leave our opening book on (adds noise to the result)")
     return parser.parse_args()
 
 
@@ -159,7 +178,7 @@ def main():
             for skill_depth in (1, 2, 3, 4):
                 score, played = run_match(
                     KnightmareBot, engine, args.level, skill_depth,
-                    args.games, verbose=not args.quiet,
+                    args.games, verbose=not args.quiet, use_book=args.book,
                 )
                 pct = 100 * score / played
                 print(f"Stockfish level {args.level} depth {skill_depth}: "
@@ -168,7 +187,7 @@ def main():
         else:
             score, played = run_match(
                 KnightmareBot, engine, args.level, args.skill_depth,
-                args.games, verbose=not args.quiet,
+                args.games, verbose=not args.quiet, use_book=args.book,
             )
             print("=" * 62)
             pct = 100 * score / played
