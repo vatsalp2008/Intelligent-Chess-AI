@@ -1357,6 +1357,13 @@ def main():
                 
                 sys.stdout.flush()
             
+            elif line in ("stop", "ponderhit"):
+                # The search runs on this thread, so by the time either of
+                # these can be read the move has already been sent. They
+                # are answered rather than ignored so a host waiting on a
+                # reply is not left hanging.
+                print("info string nothing in progress to stop", flush=True)
+
             elif line == "quit":
                 break
                 
