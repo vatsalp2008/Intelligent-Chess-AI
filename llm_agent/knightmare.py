@@ -218,6 +218,10 @@ class KnightmareFast:
         self.aborted = False
         self.transposition_table = {}
         self.opening_book = self.create_simple_opening_book()
+        # The book picks between replies at random, so a measurement that
+        # leaves it on is not reproducible. Turned off by the self play
+        # harness for that reason.
+        self.use_book = True
         
     def create_simple_opening_book(self):
         """Build the opening book, keyed by position
@@ -535,7 +539,7 @@ class KnightmareFast:
             board.pop()
 
         # Known theory for the opening, looked up by position
-        if board.fullmove_number <= BOOK_MAX_FULLMOVES:
+        if self.use_book and board.fullmove_number <= BOOK_MAX_FULLMOVES:
             replies = self.opening_book.get(board._transposition_key())
             if replies:
                 book_moves = [move for move in replies if move in legal_moves]
