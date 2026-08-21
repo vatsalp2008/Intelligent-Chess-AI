@@ -175,7 +175,11 @@ fixed set, which gives a steadier signal at the cost of a slower sweep.
 
 ### Things tried that did not survive measurement
 
-Keeping these on record saves re-deriving them:
+Keeping these on record saves re-deriving them. Every percentage below was
+measured with the opening books on, before that was found to add several
+points of noise — see the note under [Measuring a change](#measuring-a-change).
+The clear rejections stand, since a 40% result is well outside that noise;
+the marginal ones would need re-running to mean anything.
 
 | Change | Result |
 | :--- | :--- |
@@ -185,7 +189,9 @@ Keeping these on record saves re-deriving them:
 | `ISOLATED_PAWN_PENALTY` 150 | Looked 2% better to the tuner, scored 27% in a match |
 
 Two parameters were checked and left alone: `QUIESCENCE_DEPTH` 4 beat both 2
-and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3.
+and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3. Both of those margins
+were inside the noise the books were adding, so neither is settled — they
+are recorded as "no reason to change", not as measured optima.
 
 ### Options
 
