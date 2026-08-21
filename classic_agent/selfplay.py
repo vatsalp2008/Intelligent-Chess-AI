@@ -60,6 +60,19 @@ def load_engine(path, name):
     return module
 
 
+def disable_book(bot):
+    """Turn off a bot's opening book if it has one
+
+    The book picks between replies at random, so leaving it on makes a
+    measurement irreproducible: an engine played against an identical copy
+    of itself scored 54%, 54% and 50% over the same twelve games. It also
+    means the first few moves of every game test the book rather than the
+    search, which is the thing being measured.
+    """
+    if hasattr(bot, "use_book"):
+        bot.use_book = False
+
+
 def play_game(white_bot, black_bot, opening, depth, seconds=None, max_plies=160):
     """Play one game and return a PGN style result string
 
@@ -90,12 +103,15 @@ def play_game(white_bot, black_bot, opening, depth, seconds=None, max_plies=160)
 
 
 def run_match(new_module, old_module, depth, seconds=None, verbose=True,
-              max_games=None):
+              max_games=None, use_book=False):
     """Play openings from both sides, returning (new_score, games)
 
     max_games stops early, which is useful when a full match is too slow to
     sit through. Colours still alternate, so an odd limit leaves one opening
     played from one side only.
+
+    The books are off by default, so that a fixed depth match is
+    reproducible and measures the search rather than the book.
     """
     new_score = 0.0
     games = 0
@@ -107,6 +123,9 @@ def run_match(new_module, old_module, depth, seconds=None, verbose=True,
             games += 1
             new_bot = new_module.KnightmareBot()
             old_bot = old_module.KnightmareBot()
+            if not use_book:
+                disable_book(new_bot)
+                disable_book(old_bot)
 
             if new_is_white:
                 result = play_game(new_bot, old_bot, opening, depth, seconds)
@@ -142,6 +161,8 @@ def parse_args():
     parser.add_argument("--games", type=int, default=None, metavar="N",
                         help="stop after N games instead of playing them all")
     parser.add_argument("--quiet", action="store_true", help="only print the final score")
+    parser.add_argument("--book", action="store_true",
+                        help="leave the opening books on (results stop being reproducible)")
     return parser.parse_args()
 
 
@@ -155,12 +176,13 @@ def main():
         setting = f"depth {args.depth}"
     else:
         setting = f"{args.seconds}s per move"
-    print(f"Current engine vs {args.baseline} at {setting}")
+    book = "book on" if args.book else "book off"
+    print(f"Current engine vs {args.baseline} at {setting}, {book}")
     print("=" * 60)
 
     score, games = run_match(new_module, old_module, args.depth,
                              seconds=args.seconds, verbose=not args.quiet,
-                             max_games=args.games)
+                             max_games=args.games, use_book=args.book)
 
     print("=" * 60)
     percent = 100 * score / games
