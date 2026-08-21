@@ -583,6 +583,12 @@ def get_board():
             game_board,
             size=500,
             flipped=(mode == PLAY_MODE and human_colour == chess.BLACK),
+            # Otherwise the engine's reply has to be spotted by comparing
+            # the board against what it looked like a moment ago
+            lastmove=game_board.move_stack[-1] if game_board.move_stack else None,
+            # Being in check is easy to miss when the king is not the piece
+            # that just moved
+            check=game_board.king(game_board.turn) if game_board.is_check() else None,
         )
 
         # Determine game status
