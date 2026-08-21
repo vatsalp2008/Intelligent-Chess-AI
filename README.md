@@ -102,8 +102,22 @@ git show HEAD~1:classic_agent/knightmare_bot.py > /tmp/old_bot.py
 python selfplay.py /tmp/old_bot.py --depth 3
 ```
 
-Fixed depth rather than fixed time keeps the result reproducible. As a
-sanity check, an engine played against an identical copy scores 50%.
+Fixed depth rather than fixed time keeps the result reproducible, but only
+with the opening books off, which is now the default. The books pick
+between replies at random, so with them on an engine played against an
+**identical copy of itself** scored 54%, 54% and 50% over the same twelve
+games — a spread of four points from nothing but the book. With them off it
+scores exactly 50% every time, over both twelve and twenty four games.
+
+That matters for reading the numbers elsewhere in this file: results
+recorded before this was fixed carry several points of noise that has
+nothing to do with the change being measured, and differences under about
+eight points should be treated as unmeasured rather than as real. `--book`
+re-enables them for the rare case where the book is the thing being tested.
+
+The books also meant the first five full moves of every game were book
+moves rather than searched ones, so a search change had barely a third of
+each game to show itself in.
 
 Use `--seconds` instead when the change was about speed. A faster search
 cannot change what a fixed-depth search returns, so ordering and pruning
