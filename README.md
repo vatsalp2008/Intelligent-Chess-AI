@@ -192,9 +192,22 @@ the marginal ones would need re-running to mean anything.
 | `ISOLATED_PAWN_PENALTY` 150 | Looked 2% better to the tuner, scored 27% in a match |
 
 Two parameters were checked and left alone: `QUIESCENCE_DEPTH` 4 beat both 2
-and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3. Both of those margins
-were inside the noise the books were adding, so neither is settled — they
-are recorded as "no reason to change", not as measured optima.
+and 6, and `NULL_MOVE_REDUCTION` 2 beat both 1 and 3. Both margins were
+originally inside the noise the books were adding.
+
+`QUIESCENCE_DEPTH` has since been re-run with the books off, so the numbers
+are reproducible: 4 scores 54% (13/24) against 2 and 54% (13/24) against 6.
+Losing a point in both directions is what a local optimum looks like, so 4
+is confirmed to be no worse than either neighbour.
+
+It is still not proven optimal, and it is worth being clear why. Turning the
+books off removes run-to-run variance — the same match now gives the same
+answer every time — but it does not remove sampling variance: 24 games come
+from 12 openings, and a different opening set could move a one-game margin
+either way. Reproducible is not the same as representative.
+
+`NULL_MOVE_REDUCTION` has not been re-run, so it stays recorded as "no
+reason to change" rather than as a measured optimum.
 
 ### Options
 
