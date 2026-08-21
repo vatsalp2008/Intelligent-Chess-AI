@@ -1176,6 +1176,38 @@ def parse_setoption(line):
     return name, value
 
 
+def apply_option(bot, name, value):
+    """Set one option on the engine, returning what happened as text
+
+    Unknown options are reported rather than ignored: a host that has
+    misspelled one otherwise sees no sign that its setting did nothing.
+    """
+    known = {name.lower(): name for name, *_ in UCI_OPTIONS}
+    canonical = known.get(name.strip().lower())
+    if canonical is None:
+        return f"ignoring unknown option {name}"
+
+    if canonical == "Hash":
+        try:
+            megabytes = int(value)
+        except (TypeError, ValueError):
+            return f"Hash needs a number, not {value!r}"
+        _, _, _, low, high = next(o for o in UCI_OPTIONS if o[0] == "Hash")
+        megabytes = max(low, min(megabytes, high))
+        bot.tt_limit = hash_mb_to_entries(megabytes)
+        # Entries already stored beyond the new limit would otherwise sit
+        # there until the table happened to be cleared
+        if len(bot.transposition_table) > bot.tt_limit:
+            bot.transposition_table.clear()
+        return f"Hash set to {megabytes} MB ({bot.tt_limit} entries)"
+
+    if canonical == "OwnBook":
+        bot.use_book = str(value).strip().lower() in ("true", "1", "yes", "on")
+        return f"OwnBook set to {str(bot.use_book).lower()}"
+
+    return f"ignoring unknown option {name}"
+
+
 def parse_go(line, white_to_move=True):
     """Work out a (time_limit_seconds, max_depth) budget for a go command"""
     parts = line.split()
@@ -1277,9 +1309,20 @@ def main():
                 print("readyok")
                 sys.stdout.flush()
             
+            elif line.startswith("setoption"):
+                parsed = parse_setoption(line)
+                if parsed is None:
+                    print(f"info string could not read: {line}", flush=True)
+                else:
+                    print(f"info string {apply_option(bot, *parsed)}", flush=True)
+
             elif line == "ucinewgame":
+                # Settings survive a new game: a host sets them once, after
+                # uci, and does not repeat them between games
+                settings = (bot.tt_limit, bot.use_book)
                 board = chess.Board()
                 bot = KnightmareBot()
+                bot.tt_limit, bot.use_book = settings
             
             elif line.startswith("position"):
                 board = parse_position(line)
