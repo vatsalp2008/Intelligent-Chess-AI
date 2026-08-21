@@ -593,8 +593,16 @@ def get_board():
 
         # Determine game status
         if game_board.is_checkmate():
-            winner = "White (Random)" if game_board.turn == chess.BLACK else "Black (Knightmare)"
-            status = f"Checkmate! {winner} wins!"
+            # The side to move is the one that has been mated
+            loser = game_board.turn
+            if mode == PLAY_MODE:
+                # Naming the colours would tell someone playing Black that
+                # "White wins", leaving them to work out that they lost
+                status = ("Checkmate - you lost" if loser == human_colour
+                          else "Checkmate - you win!")
+            else:
+                winner = "White (Random)" if loser == chess.BLACK else "Black (Knightmare)"
+                status = f"Checkmate! {winner} wins!"
         elif game_board.is_stalemate():
             status = "Stalemate - Draw!"
         elif game_board.is_insufficient_material():
