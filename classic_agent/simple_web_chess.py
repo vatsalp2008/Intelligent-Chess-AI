@@ -576,7 +576,14 @@ def get_board():
 
     with board_lock:
 
-        svg = chess.svg.board(game_board, size=500)
+        # Drawn from the side you are playing. Looking at your own pieces
+        # from the far side of the board is disorienting, and every chess
+        # interface flips for Black.
+        svg = chess.svg.board(
+            game_board,
+            size=500,
+            flipped=(mode == PLAY_MODE and human_colour == chess.BLACK),
+        )
 
         # Determine game status
         if game_board.is_checkmate():
