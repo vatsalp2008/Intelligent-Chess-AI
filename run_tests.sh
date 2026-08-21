@@ -61,6 +61,7 @@ echo "===================================================="
 # Engine and search: only need python-chess
 run "classic: evaluation"    classic_agent "$PYTHON" -m unittest test_evaluation
 run "classic: search safety"  classic_agent "$PYTHON" -m unittest test_search_safety
+run "classic: uci options"    classic_agent "$PYTHON" -m unittest test_uci_options
 run "classic: engine loader"  classic_agent "$PYTHON" -m unittest test_bot_loader
 run "classic: tournament"     classic_agent "$PYTHON" -m unittest test_tournament
 run "classic: tuner"          classic_agent "$PYTHON" -m unittest test_tune_eval
