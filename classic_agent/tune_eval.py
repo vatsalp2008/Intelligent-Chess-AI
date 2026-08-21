@@ -140,6 +140,20 @@ def reference_scores(engine, positions, cache):
     return best
 
 
+def searching_bot():
+    """An engine that will search rather than answer from its book
+
+    A book move ignores the evaluation entirely, so a position inside book
+    range would score the same whatever the weights were set to, and the
+    sweep would report no difference from a change that does have one. The
+    twelve positions in use are all past the book, but that is luck rather
+    than a guarantee, and --sample can generate others.
+    """
+    bot = knightmare_bot.KnightmareBot()
+    bot.use_book = False
+    return bot
+
+
 def centipawn_loss(engine, positions, best, cache, our_depth=DEFAULT_OUR_DEPTH):
     """Total centipawns given away across the positions, lower is better"""
     loss = 0
@@ -148,7 +162,7 @@ def centipawn_loss(engine, positions, best, cache, our_depth=DEFAULT_OUR_DEPTH):
             continue
         board = chess.Board(fen)
         # A fresh engine each time so no table carries over between settings
-        bot = knightmare_bot.KnightmareBot()
+        bot = searching_bot()
         move = bot.get_move(board, NO_TIME_LIMIT, our_depth)
         if move is None or move not in board.legal_moves:
             loss += 1000  # failing to move is worse than any bad move
@@ -229,7 +243,9 @@ def sample_positions(count, plies=(4, 8, 12)):
         for uci in opening:
             board.push(chess.Move.from_uci(uci))
 
-        bot = knightmare_bot.KnightmareBot()
+        # Also without the book, so the sampled positions are ones the
+        # search actually chose and the same set comes back every run
+        bot = searching_bot()
         for ply in range(max(plies) + 1):
             if board.is_game_over() or len(sampled) >= count:
                 break
