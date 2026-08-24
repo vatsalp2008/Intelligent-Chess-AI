@@ -736,6 +736,20 @@ class KnightmareBot:
         key = (move.from_square, move.to_square)
         self.history_table[key] = self.history_table.get(key, 0) + depth
 
+    @staticmethod
+    def game_over(board):
+        """True when there is nothing left to search from here
+
+        is_game_over() alone says False for the fifty move rule and
+        threefold repetition, because both need a claim. The evaluation
+        already scores those as drawn, so searching on from one only
+        confirms a zero it already knew: 1,575 nodes spent on a queen up
+        position whose clock had run out.
+        """
+        if board.is_game_over():
+            return True
+        return board.halfmove_clock >= 100 or board.is_repetition(3)
+
     def check_clock(self):
         """Abort the search if the budget has run out
 
@@ -759,7 +773,7 @@ class KnightmareBot:
         self.nodes += 1
         self.check_clock()
 
-        if board.is_game_over():
+        if self.game_over(board):
             return self.evaluate(board, ply)
 
         stand_pat = self.evaluate(board, ply)
@@ -809,7 +823,7 @@ class KnightmareBot:
         self.nodes += 1
         self.check_clock()
 
-        if board.is_game_over():
+        if self.game_over(board):
             return self.evaluate(board, ply), None
 
         # Being in check is a forced sequence, so stopping here would cut a
