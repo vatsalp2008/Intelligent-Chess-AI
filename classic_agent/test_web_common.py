@@ -17,8 +17,11 @@ import chess
 
 from web_common import (
     BOARD_SIZE,
+    draw_text,
+    game_finished,
     legal_by_origin,
     moves_by,
+    player_result_text,
     plies_to_take_back,
     render_board,
 )
@@ -106,6 +109,72 @@ class TestRenderBoard(unittest.TestCase):
         before = board.fen()
         render_board(board)
         self.assertEqual(board.fen(), before)
+
+
+class TestDrawText(unittest.TestCase):
+    def test_a_live_game_is_not_drawn(self):
+        self.assertIsNone(draw_text(chess.Board()))
+
+    def test_checkmate_is_not_a_draw(self):
+        board = chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')
+        self.assertIsNone(draw_text(board))
+
+    def test_stalemate_is_named(self):
+        board = chess.Board('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')
+        self.assertTrue(board.is_stalemate())
+        self.assertIn('Stalemate', draw_text(board))
+
+    def test_insufficient_material_is_named(self):
+        self.assertIn('Insufficient',
+                      draw_text(chess.Board('4k3/8/8/8/8/8/8/4K3 w - - 0 1')))
+
+    def test_the_fifty_move_rule_is_named(self):
+        board = chess.Board('4k3/8/8/8/8/8/4P3/4K3 w - - 100 60')
+        self.assertIn('50 move', draw_text(board))
+
+    def test_stalemate_wins_over_other_conditions(self):
+        """python-chess reports several at once, and this is the useful one"""
+        board = chess.Board('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')
+        self.assertIn('Stalemate', draw_text(board))
+
+
+class TestGameFinished(unittest.TestCase):
+    """Claimable draws are still the end of the game"""
+
+    def test_a_live_game_is_not_finished(self):
+        self.assertFalse(game_finished(chess.Board()))
+
+    def test_checkmate_finishes_it(self):
+        self.assertTrue(game_finished(
+            chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')))
+
+    def test_stalemate_finishes_it(self):
+        self.assertTrue(game_finished(chess.Board('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')))
+
+    def test_the_fifty_move_rule_finishes_it(self):
+        """is_game_over() alone says False here, because it is claimable"""
+        board = chess.Board('4k3/8/8/8/8/8/4P3/4K3 w - - 100 60')
+        self.assertFalse(board.is_game_over())
+        self.assertTrue(game_finished(board))
+
+
+class TestPlayerResultText(unittest.TestCase):
+    def test_a_live_game_has_no_result(self):
+        self.assertIsNone(player_result_text(chess.Board(), chess.WHITE))
+
+    def test_being_mated_says_you_lost(self):
+        board = chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')
+        self.assertEqual(player_result_text(board, chess.BLACK),
+                         'Checkmate - you lost')
+
+    def test_mating_says_you_won(self):
+        board = chess.Board('4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1')
+        self.assertEqual(player_result_text(board, chess.WHITE),
+                         'Checkmate - you win!')
+
+    def test_a_draw_is_not_a_result_here(self):
+        board = chess.Board('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')
+        self.assertIsNone(player_result_text(board, chess.WHITE))
 
 
 class TestMovesBy(unittest.TestCase):

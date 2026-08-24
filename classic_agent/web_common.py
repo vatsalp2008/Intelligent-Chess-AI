@@ -50,6 +50,54 @@ def render_board(board, flipped=False, size=BOARD_SIZE):
     )
 
 
+def game_finished(board):
+    """True when the game is over, counting the draws a player may claim
+
+    is_game_over() alone says False for the fifty move rule and threefold
+    repetition, because those are claimable rather than automatic. An
+    interface that trusts it will report a drawn position while still
+    offering moves in it.
+    """
+    return board.is_game_over(claim_draw=True)
+
+
+def draw_text(board):
+    """Why the game is drawn, or None if it is not
+
+    Both interfaces walked the same ladder of draw conditions. The order
+    matters: python-chess reports several of these at once in some
+    positions, and stalemate is the one a player wants to be told about.
+
+    The claimable draws are checked directly rather than behind an
+    is_game_over() guard, which would make them unreachable.
+    """
+    if board.is_checkmate():
+        return None
+    if board.is_stalemate():
+        return "Stalemate - Draw!"
+    if board.is_insufficient_material():
+        return "Draw - Insufficient material"
+    if board.is_fifty_moves():
+        return "Draw - 50 move rule"
+    if board.is_repetition(3):
+        return "Draw - Threefold repetition"
+    if board.is_game_over():
+        return "Game Over"
+    return None
+
+
+def player_result_text(board, human_colour):
+    """Checkmate phrased for the person playing, or None
+
+    Naming the colours would tell someone playing Black that "White wins",
+    leaving them to work out that they lost.
+    """
+    if not board.is_checkmate():
+        return None
+    # The side to move is the one that has been mated
+    return "Checkmate - you lost" if board.turn == human_colour else "Checkmate - you win!"
+
+
 def moves_by(board, colour):
     """How many moves on the stack were played by the given colour
 
