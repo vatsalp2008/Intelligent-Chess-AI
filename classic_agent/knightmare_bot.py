@@ -98,7 +98,13 @@ KING_SHIELD_PENALTY = 12
 # Stop consulting the opening book after this many full moves
 BOOK_MAX_FULLMOVES = 5
 
-# Shallowest depth at which a null move search is worth trying
+# Shallowest depth at which a null move search is worth trying.
+#
+# Worth knowing when reading any measurement of the two constants below:
+# nothing here runs at all below this depth. Instrumented on a middlegame
+# position, the null move branch was considered 0 times at root depth 3,
+# once at depth 4 and 50 times at depth 5. Since DEFAULT_MAX_DEPTH is 4,
+# null move pruning is close to dormant in ordinary play.
 NULL_MOVE_MIN_DEPTH = 4
 
 # Plies shaved off the null move search, since it only needs to be a probe.
@@ -106,6 +112,11 @@ NULL_MOVE_MIN_DEPTH = 4
 # time, with the same move chosen throughout. A reduction of 1 searches the
 # probe too deeply; 3 makes it too shallow to prove the cutoff, so the real
 # search happens anyway.
+#
+# A later self play comparison at depth 3 put 2 level with both 1 and 3 at
+# exactly 50% over 24 games. That match measured nothing: at depth 3 this
+# constant is never read. Any comparison of it has to run at depth 5 or
+# deeper to exercise the code at all.
 NULL_MOVE_REDUCTION = 2
 
 # The best move from a previous search of this position, tried before all else
