@@ -62,6 +62,7 @@ echo "===================================================="
 run "classic: evaluation"    classic_agent "$PYTHON" -m unittest test_evaluation
 run "classic: search safety"  classic_agent "$PYTHON" -m unittest test_search_safety
 run "classic: uci options"    classic_agent "$PYTHON" -m unittest test_uci_options
+run "classic: board helpers"  classic_agent "$PYTHON" -m unittest test_web_common
 run "classic: engine loader"  classic_agent "$PYTHON" -m unittest test_bot_loader
 run "classic: tournament"     classic_agent "$PYTHON" -m unittest test_tournament
 run "classic: tuner"          classic_agent "$PYTHON" -m unittest test_tune_eval
@@ -99,10 +100,12 @@ if have_module flask; then
     run "classic: web concurrency" classic_agent "$PYTHON" -m unittest test_web_concurrency
     run "classic: web settings"    classic_agent "$PYTHON" -m unittest test_web_settings
     run "classic: web play"        classic_agent "$PYTHON" -m unittest test_web_play
+    run "classic: stockfish play"  classic_agent "$PYTHON" -m unittest test_stockfish_play
 else
     skip "classic: web concurrency" "flask not installed"
     skip "classic: web settings" "flask not installed"
     skip "classic: web play" "flask not installed"
+    skip "classic: stockfish play" "flask not installed"
 fi
 
 # Slower end-to-end checks that start real subprocesses
