@@ -22,8 +22,11 @@ import chess
 
 from knightmare_bot import (
     CLOCK_CHECK_INTERVAL,
+    HISTORY_MAX_ENTRIES,
     KnightmareBot,
+    NULL_MOVE_MIN_DEPTH,
     SearchAborted,
+    TT_MAX_ENTRIES,
     parse_go,
     parse_position,
 )
@@ -228,6 +231,78 @@ class TestHardDeadline(unittest.TestCase):
                 "cut short on time" in output or "info depth" in output,
                 output,
             )
+
+
+class TestTableOccupancy(unittest.TestCase):
+    """What the tables actually hold, against the caps set for them
+
+    Both caps are far above what a real search reaches, which is worth
+    knowing before anyone spends time tuning them. These tests exist to
+    catch that changing rather than to assert a precise number, so the
+    bounds are generous.
+    """
+
+    BUSY_FEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+
+    def searched(self, fen=None, depth=4):
+        bot = KnightmareBot()
+        bot.use_book = False
+        with contextlib.redirect_stdout(io.StringIO()):
+            bot.get_move(chess.Board(fen or self.BUSY_FEN), 600.0, depth)
+        return bot
+
+    def test_a_search_fills_a_fraction_of_the_table(self):
+        bot = self.searched(depth=5)
+        self.assertGreater(len(bot.transposition_table), 100)
+        self.assertLess(len(bot.transposition_table), TT_MAX_ENTRIES // 10)
+
+    def test_a_whole_game_never_reaches_the_cap(self):
+        """The clearing path is covered by tests, not by ordinary play"""
+        bot = KnightmareBot()
+        bot.use_book = False
+        board = chess.Board()
+        with contextlib.redirect_stdout(io.StringIO()):
+            for _ in range(40):
+                if board.is_game_over():
+                    break
+                move = bot.get_move(board, 600.0, 3)
+                if move is None:
+                    break
+                board.push(move)
+        self.assertLess(len(bot.transposition_table), TT_MAX_ENTRIES // 10)
+        self.assertLess(len(bot.history_table), HISTORY_MAX_ENTRIES // 10)
+
+    def test_quiet_cutoffs_reach_the_history_table(self):
+        """Captures are ordered first anyway, so history is for the rest"""
+        quiet = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        self.assertGreater(len(self.searched(quiet).history_table), 0)
+
+    def test_killers_are_recorded_by_ply(self):
+        quiet = "r1bq1r1k/pp2n1pp/2n1p3/3pP3/3P4/2NB1N2/PP3PPP/R1BQ1RK1 w - - 0 12"
+        killers = self.searched(quiet).killer_moves
+        self.assertTrue(killers)
+        for ply, moves in killers.items():
+            with self.subTest(ply=ply):
+                self.assertLessEqual(len(moves), 2, "at most two killers per ply")
+
+    def test_null_move_pruning_does_not_run_at_shallow_depth(self):
+        """Any measurement of its constants below this depth measures nothing"""
+        attempts = []
+        original = KnightmareBot.has_pieces_for_null_move
+
+        def counting(self, board):
+            attempts.append(1)
+            return original(self, board)
+
+        KnightmareBot.has_pieces_for_null_move = counting
+        try:
+            self.searched(depth=NULL_MOVE_MIN_DEPTH - 1)
+            self.assertEqual(len(attempts), 0)
+            attempts.clear()
+            self.searched(depth=NULL_MOVE_MIN_DEPTH + 1)
+            self.assertGreater(len(attempts), 0)
+        finally:
+            KnightmareBot.has_pieces_for_null_move = original
 
 
 class TestClockCheck(unittest.TestCase):
