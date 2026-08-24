@@ -20,6 +20,7 @@ DEFAULT_PORT = 5001
 THINK_SECONDS = 1.0
 
 from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
+from web_common import legal_by_origin, plies_to_take_back, render_board
 
 bot_class = load_bot_class()
 
@@ -57,19 +58,6 @@ def human_to_move():
     """True when the interface is waiting for a person rather than a bot"""
     return mode == PLAY_MODE and game_board.turn == human_colour
 
-
-def legal_by_origin(board):
-    """Legal moves as {from_square: [uci, ...]}
-
-    Sent to the browser so it can show a piece's options and reject an
-    impossible drag without having to know how chess works. Promotions
-    appear as the full UCI including the piece, so the client can offer a
-    choice when several share the same destination.
-    """
-    grouped = {}
-    for move in board.legal_moves:
-        grouped.setdefault(chess.square_name(move.from_square), []).append(move.uci())
-    return grouped
 
 def get_knightmare_move(board):
     """Get move from Knightmare bot, remembering what it reported"""
@@ -610,16 +598,9 @@ def get_board():
         # Drawn from the side you are playing. Looking at your own pieces
         # from the far side of the board is disorienting, and every chess
         # interface flips for Black.
-        svg = chess.svg.board(
+        svg = render_board(
             game_board,
-            size=500,
             flipped=(mode == PLAY_MODE and human_colour == chess.BLACK),
-            # Otherwise the engine's reply has to be spotted by comparing
-            # the board against what it looked like a moment ago
-            lastmove=game_board.move_stack[-1] if game_board.move_stack else None,
-            # Being in check is easy to miss when the king is not the piece
-            # that just moved
-            check=game_board.king(game_board.turn) if game_board.is_check() else None,
         )
 
         # Determine game status
@@ -769,30 +750,18 @@ def takeback():
         if mode != PLAY_MODE:
             return jsonify({'error': 'Takeback is only for a game you are playing'}), 400
 
-        # Counted rather than just checking the stack is non-empty: as
-        # Black the stack can hold only the engine's opening move, and
-        # unwinding that leaves an empty board with the engine to move
-        # and nothing prompting it to play.
-        root_turn = game_board.root().turn
-        yours = sum(
-            1 for index in range(len(game_board.move_stack))
-            if (root_turn if index % 2 == 0 else not root_turn) == human_colour
-        )
-        if not yours:
+        # Zero means there is nothing of yours to undo. As Black the stack
+        # can hold only the engine's opening move, and unwinding that
+        # leaves an empty board with the engine to move and nothing
+        # prompting it to play.
+        undone = plies_to_take_back(game_board, human_colour)
+        if not undone:
             return jsonify({'error': 'No moves to take back'}), 400
 
-        undone = 0
-        # Stop once it is your turn again, or once nothing is left. A game
-        # that has ended is still unwound, so a loss can be replayed.
-        while game_board.move_stack:
+        for _ in range(undone):
             game_board.pop()
-            undone += 1
             if move_history:
                 move_history.pop()
-            # Your own side, not White: as Black this would otherwise stop
-            # one move early and leave the engine to move
-            if game_board.turn == human_colour:
-                break
 
         # The line the engine reported was for a position that no longer
         # exists, so showing it would be misleading
