@@ -14,7 +14,8 @@ Intelligent-Chess-AI/
 │   ├── knightmare_bot.py       # Core Minimax Logic
 │   ├── bot_loader.py           # Shared Engine Loading and PGN Output
 │   ├── simple_web_chess.py     # Web Interface (Play, or Watch vs Random)
-│   ├── knightmare_vs_stockfish.py  # Web Interface (vs Stockfish)
+│   ├── knightmare_vs_stockfish.py  # Web Interface (Play, or Watch vs Stockfish)
+│   ├── web_common.py           # Board Drawing Shared by Both Interfaces
 │   ├── simple_tournament.py    # Tournament Runner (PGN output)
 │   ├── standalone_tree_viz.py  # Minimax Tree Figures
 │   ├── diagnose_knight.py      # Per-position Search Diagnostics
@@ -337,6 +338,25 @@ cd classic_agent
 python knightmare_vs_stockfish.py           # http://127.0.0.1:5002
 # Set STOCKFISH_PATH if the binary is somewhere unusual
 ```
+
+This interface opens watching Knightmare play Stockfish, with sliders for
+Stockfish's level and thinking time. **Mode** hands one side to you and
+**Play As** chooses which; the opponent is Stockfish either way, since its
+level is what makes the game winnable. Click a piece to see where it can
+go, then click a square to move there. Take Back, Save PGN and the FEN box
+work as they do in the other interface.
+
+The board is drawn from whichever side matters: yours when you are playing,
+and Knightmare's otherwise, so the engine being developed is the one at the
+bottom. Both interfaces share `web_common.py` for the parts that depend
+only on a position — drawing the board, listing the legal moves by origin
+square, and working out how far a takeback has to unwind. Anything that
+touches an app's own game state stays in that app, because the two differ
+there.
+
+Without a Stockfish binary the interface still runs: its moves fall back to
+random legal ones, which is enough to click around in and is what the tests
+rely on.
 
 **Run Tournament**
 ```bash
