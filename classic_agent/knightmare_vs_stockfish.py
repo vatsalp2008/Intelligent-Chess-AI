@@ -16,6 +16,7 @@ import time
 import os
 
 from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
+from web_common import legal_by_origin, render_board
 
 bot_class = load_bot_class()
 
@@ -596,7 +597,12 @@ def get_board():
 
     with board_lock:
 
-        svg = chess.svg.board(game_board, size=500)
+        # Drawn from Knightmare's side, so the engine being developed is
+        # the one at the bottom of the board
+        svg = render_board(
+            game_board,
+            flipped=not app.config.get('white_is_knightmare', False),
+        )
 
         # Determine game status
         if game_board.is_checkmate():
@@ -631,6 +637,10 @@ def get_board():
             'white_to_move': game_board.turn == chess.WHITE,
             'stockfish_available': stockfish_engine is not None,
             'engine': last_engine_info,
+            'knightmare_is_white': app.config.get('white_is_knightmare', False),
+            # Grouped by origin square, so the interface can show where a
+            # piece may go without knowing how chess works
+            'legal': legal_by_origin(game_board),
         })
 
 @app.route('/pgn')
