@@ -398,11 +398,20 @@ HTML = """
             <button onclick="makeMove()">▶️ Make Move</button>
             <button onclick="toggleAuto()" id="auto-btn">🔄 Auto Play: OFF</button>
             <button onclick="savePgn()">💾 Save PGN</button>
+            <button onclick="toggleMode()" id="mode-btn">👀 Mode: Watch</button>
+            <button onclick="swapColour()" id="colour-btn">♟️ Play As: White</button>
+            <button onclick="takeBack()" id="undo-btn">↩️ Take Back</button>
 
             <h3>📋 Move History</h3>
             <div id="moves"></div>
         </div>
     </div>
+
+    <style>
+        /* Pieces are drawn over the square rectangles, so without this a
+           click on a piece never reaches the square under it */
+        #board use { pointer-events: none; }
+    </style>
 
     <script>
         let autoPlay = false;
@@ -413,6 +422,13 @@ HTML = """
         let stockfishLevel = 1;
         let stockfishTime = 0.1;
         let whiteIsKnightmare = false;
+        let playMode = false;
+        let myColour = 'white';
+        let legalMoves = {};
+        let selected = null;
+
+        // Outline colour for the square you picked and the ones it can reach
+        const HIGHLIGHT = '#2f9e44';
 
         function updateBoard() {
             return fetch('/board')
@@ -467,6 +483,19 @@ HTML = """
                         document.getElementById('stockfish-status').textContent = '❌ Stockfish Not Found (using random moves)';
                     }
 
+                    // Redrawing replaces the squares, so the handlers and
+                    // the move list have to be attached to the new ones
+                    if (playMode !== (data.mode === 'play') || myColour !== data.colour) {
+                        playMode = data.mode === 'play';
+                        myColour = data.colour;
+                        showMode();
+                    }
+                    legalMoves = data.your_turn ? (data.legal || {}) : {};
+                    if (!data.your_turn) {
+                        selected = null;
+                    }
+                    wireBoard();
+
                     // Stop auto play if game over
                     if (data.game_over && autoPlay) {
                         stopAuto();
@@ -481,6 +510,187 @@ HTML = """
                 .catch(error => {
                     document.getElementById('status').textContent =
                         'Could not load the board: ' + error;
+                });
+        }
+
+        function squareName(rect) {
+            // python-chess names each square in the rect's class, as in
+            // "square dark a1", so the board needs no coordinate maths
+            const parts = rect.getAttribute('class').split(' ');
+            return parts[parts.length - 1];
+        }
+
+        function boardSquares() {
+            return document.querySelectorAll('#board rect.square');
+        }
+
+        function wireBoard() {
+            const clickable = playMode && !document.getElementById('board').dataset.locked;
+            boardSquares().forEach(rect => {
+                const name = squareName(rect);
+                rect.style.cursor = clickable ? 'pointer' : 'default';
+                rect.onclick = clickable ? () => clickSquare(name) : null;
+            });
+            showSelection();
+        }
+
+        function showSelection() {
+            boardSquares().forEach(rect => {
+                const name = squareName(rect);
+                const reachable = selected && (legalMoves[selected] || [])
+                    .some(uci => uci.slice(2, 4) === name);
+                if (name === selected) {
+                    rect.setAttribute('stroke', HIGHLIGHT);
+                    rect.setAttribute('stroke-width', '4');
+                } else if (reachable) {
+                    rect.setAttribute('stroke', HIGHLIGHT);
+                    rect.setAttribute('stroke-width', '2');
+                } else {
+                    rect.setAttribute('stroke', 'none');
+                }
+            });
+        }
+
+        function clickSquare(name) {
+            if (selected === null) {
+                if (legalMoves[name]) {
+                    selected = name;
+                    showSelection();
+                }
+                return;
+            }
+
+            if (name === selected) {
+                selected = null;
+                showSelection();
+                return;
+            }
+
+            const options = (legalMoves[selected] || [])
+                .filter(uci => uci.slice(2, 4) === name);
+
+            if (options.length === 0) {
+                // Clicking another of your own pieces picks that one up
+                // instead of being treated as an illegal move
+                selected = legalMoves[name] ? name : null;
+                showSelection();
+                return;
+            }
+
+            const uci = options.length === 1 ? options[0] : choosePromotion(options);
+            selected = null;
+            showSelection();
+            if (uci) {
+                sendMove(uci);
+            }
+        }
+
+        function choosePromotion(options) {
+            // Several moves share a destination only when a pawn is
+            // promoting, and the piece has to come from the player
+            const answer = prompt('Promote to q, r, b or n?', 'q');
+            if (answer === null) {
+                return null;
+            }
+            const wanted = options.find(uci => uci.endsWith(answer.trim().toLowerCase()));
+            if (!wanted) {
+                alert('Pick one of q, r, b or n');
+            }
+            return wanted || null;
+        }
+
+        function sendMove(uci) {
+            // Locked while Stockfish replies, so a second click cannot
+            // queue a move onto a position that is about to change
+            document.getElementById('board').dataset.locked = '1';
+            return fetch('/human_move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({move: uci})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        delete document.getElementById('board').dataset.locked;
+                        return updateBoard();
+                    }
+                    return updateBoard().then(() => makeMove());
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent =
+                        'Could not send the move: ' + error;
+                })
+                .finally(() => {
+                    delete document.getElementById('board').dataset.locked;
+                    wireBoard();
+                });
+        }
+
+        function toggleMode() {
+            stopAuto();
+            requestMode(playMode ? 'watch' : 'play', myColour);
+        }
+
+        function swapColour() {
+            // Changing sides restarts the game either way, so there is
+            // nothing to preserve by only switching while playing
+            stopAuto();
+            myColour = myColour === 'white' ? 'black' : 'white';
+            requestMode(playMode ? 'play' : 'watch', myColour);
+        }
+
+        function requestMode(wanted, colour) {
+            fetch('/set_mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: wanted, colour: colour})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    playMode = data.mode === 'play';
+                    myColour = data.colour;
+                    showMode();
+                    // Stockfish has the first move when you take Black,
+                    // so ask for it rather than leaving an idle board
+                    return updateBoard().then(() => {
+                        if (playMode && myColour === 'black') {
+                            return makeMove();
+                        }
+                    });
+                });
+        }
+
+        function showMode() {
+            const modeButton = document.getElementById('mode-btn');
+            modeButton.textContent = playMode ? '🎮 Mode: You vs Stockfish' : '👀 Mode: Watch';
+            modeButton.className = playMode ? 'active' : '';
+
+            const colourButton = document.getElementById('colour-btn');
+            colourButton.textContent =
+                '♟️ Play As: ' + (myColour === 'white' ? 'White' : 'Black');
+            colourButton.className = playMode ? 'active' : '';
+
+            // Nothing to step through by hand while it is your turn, and
+            // no side of yours to take a move back for when watching
+            document.getElementById('auto-btn').disabled = playMode;
+            document.getElementById('undo-btn').disabled = !playMode;
+        }
+
+        function takeBack() {
+            fetch('/takeback', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    selected = null;
+                    return updateBoard();
                 });
         }
 
@@ -590,7 +800,9 @@ HTML = """
             }
         }
 
-        // Load board on startup
+        // Load board on startup. showMode first, or the buttons claim a
+        // state the server does not have until the first board arrives.
+        showMode();
         updateBoard();
     </script>
 </body>
