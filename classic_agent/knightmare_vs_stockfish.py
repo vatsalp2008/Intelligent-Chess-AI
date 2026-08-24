@@ -622,12 +622,19 @@ def get_board():
 
         # Determine game status
         if game_board.is_checkmate():
-            winner = "White" if game_board.turn == chess.BLACK else "Black"
-            if app.config.get('white_is_knightmare', False):
-                winner += " (Knightmare)" if winner == "White" else " (Stockfish)"
+            # The side to move is the one that has been mated
+            if mode == PLAY_MODE:
+                # Naming the colours would tell someone playing Black that
+                # "White wins", leaving them to work out that they lost
+                status = ("Checkmate - you lost" if game_board.turn == human_colour
+                          else "Checkmate - you win!")
             else:
-                winner += " (Stockfish)" if winner == "White" else " (Knightmare)"
-            status = f"Checkmate! {winner} wins!"
+                winner = "White" if game_board.turn == chess.BLACK else "Black"
+                if app.config.get('white_is_knightmare', False):
+                    winner += " (Knightmare)" if winner == "White" else " (Stockfish)"
+                else:
+                    winner += " (Stockfish)" if winner == "White" else " (Knightmare)"
+                status = f"Checkmate! {winner} wins!"
         elif game_board.is_stalemate():
             status = "Stalemate - Draw!"
         elif game_board.is_insufficient_material():
@@ -636,6 +643,12 @@ def get_board():
             status = "Draw - 50 move rule"
         elif game_board.is_game_over():
             status = "Game Over"
+        elif mode == PLAY_MODE:
+            # Phrased as a prompt rather than "X to move", which reads
+            # oddly when the side to move is the person reading it
+            status = "Your move" if human_to_move() else "Stockfish is thinking..."
+            if game_board.is_check():
+                status += " - CHECK!"
         else:
             if app.config.get('white_is_knightmare', False):
                 turn = "White (Knightmare)" if game_board.turn == chess.WHITE else "Black (Stockfish)"
