@@ -114,6 +114,11 @@ def check_position(bot, name, fen, wanted, note, depth, verbose, seconds=NO_TIME
 def run_suite(depth, verbose=False, seconds=NO_TIME_LIMIT):
     """Run every position, returning (passed, total)"""
     bot = KnightmareFast()
+    # The book answers without searching, so a position inside book range
+    # would grade the book rather than the search it is meant to test. None
+    # of the positions below are in the book today, but that is a property
+    # of the current list rather than a guarantee about the next one added.
+    bot.use_book = False
     passed = 0
 
     print(f"Baseline engine tactics suite at depth {depth}")
