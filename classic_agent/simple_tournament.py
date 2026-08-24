@@ -25,8 +25,14 @@ class ChessEngine:
         self.output = queue.Queue()
         self.reader = None
         
-    def start(self):
-        """Start the engine process"""
+    def start(self, use_book=True):
+        """Start the engine process
+
+        With use_book false the engine is asked to put its own opening book
+        away. The book chooses between replies at random, so leaving it on
+        means the same tournament gives a different result each time and the
+        opening is decided by the book rather than by either engine.
+        """
         self.process = subprocess.Popen(
             ['python3', self.path],
             stdin=subprocess.PIPE,
@@ -43,7 +49,12 @@ class ChessEngine:
         # Send UCI initialization
         self.send("uci")
         self.wait_for("uciok")
-        
+
+        # An engine with no such option ignores the line, which is what the
+        # protocol says to do with an option it does not have
+        if not use_book:
+            self.send("setoption name OwnBook value false")
+
         self.send("isready")
         self.wait_for("readyok")
         
@@ -230,13 +241,15 @@ def save_games(games, path):
     print(f"\nSaved {len(games)} game(s) to {path}")
 
 
-def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn"):
+def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn",
+                   use_book=False):
     """Run a tournament between Knightmare and Random bots"""
     print("=" * 60)
     print("Simple Chess Tournament")
     print("=" * 60)
     print(f"Games to play: {num_games}")
     print(f"Time per move: {time_per_move}ms")
+    print(f"Opening book:  {'on' if use_book else 'off'}")
     print("=" * 60)
     
     results = {"knightmare": 0, "random": 0}
@@ -262,8 +275,8 @@ def run_tournament(num_games=10, time_per_move=1000, pgn_path="tournament.pgn"):
         
         try:
             # Start engines
-            white.start()
-            black.start()
+            white.start(use_book=use_book)
+            black.start(use_book=use_book)
             
             # Send new game command
             white.send("ucinewgame")
@@ -350,13 +363,18 @@ def parse_args():
         "--pgn", default="tournament.pgn", metavar="PATH",
         help="where to write the games (default: tournament.pgn)"
     )
+    parser.add_argument(
+        "--book", action="store_true",
+        help="leave the engines' own books on (results stop being repeatable)"
+    )
     return parser.parse_args()
 
 
 def main():
     """Main function"""
     args = parse_args()
-    run_tournament(args.games, time_per_move=args.time, pgn_path=args.pgn)
+    run_tournament(args.games, time_per_move=args.time, pgn_path=args.pgn,
+                   use_book=args.book)
 
 if __name__ == "__main__":
     main()
