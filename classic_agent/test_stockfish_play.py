@@ -293,5 +293,57 @@ class TestPgn(PlayTestCase):
         self.assertNotIn('Human', (names['White'], names['Black']))
 
 
+class TestClaimableDraws(unittest.TestCase):
+    """A drawn position must not still be offering moves
+
+    is_game_over() says False for the fifty move rule and threefold
+    repetition, because those are claims a player makes rather than
+    automatic. Trusting it reported a draw in the status line while auto
+    play kept grinding away in the position.
+    """
+
+    FIFTY_MOVE_FEN = '4k3/8/8/8/8/8/4P3/4K3 w - - 100 60'
+
+    def setUp(self):
+        self.client = web.app.test_client()
+        web.mode = web.WATCH_MODE
+        web.reset_game()
+
+    def tearDown(self):
+        web.mode = web.WATCH_MODE
+        web.reset_game()
+
+    def load_fifty_move(self):
+        web.game_board = chess.Board(self.FIFTY_MOVE_FEN)
+        # The library agrees it is claimable but not automatic
+        self.assertFalse(web.game_board.is_game_over())
+        self.assertTrue(web.game_board.is_fifty_moves())
+
+    def test_the_status_says_it_is_drawn(self):
+        self.load_fifty_move()
+        self.assertIn('50 move', self.client.get('/board').get_json()['status'])
+
+    def test_the_board_reports_the_game_as_over(self):
+        self.load_fifty_move()
+        self.assertTrue(self.client.get('/board').get_json()['game_over'])
+
+    def test_no_further_moves_are_played(self):
+        self.load_fifty_move()
+        before = web.game_board.fen()
+        self.assertIn('error', self.client.post('/move').get_json())
+        self.assertEqual(web.game_board.fen(), before)
+
+    def test_a_repetition_also_ends_it(self):
+        """Shuffling kings back to the same position three times"""
+        # No castling rights in the FEN: the rook's first move would
+        # forfeit them, so the starting position would never recur
+        web.game_board = chess.Board('4k3/8/8/8/8/8/8/R3K3 w - - 0 1')
+        for uci in ('a1a2', 'e8e7', 'a2a1', 'e7e8',
+                    'a1a2', 'e8e7', 'a2a1', 'e7e8'):
+            web.game_board.push(chess.Move.from_uci(uci))
+        self.assertTrue(web.game_board.is_repetition(3))
+        self.assertTrue(self.client.get('/board').get_json()['game_over'])
+
+
 if __name__ == '__main__':
     unittest.main()
