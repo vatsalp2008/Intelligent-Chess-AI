@@ -16,7 +16,7 @@ import time
 import os
 
 from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
-from web_common import legal_by_origin, render_board
+from web_common import legal_by_origin, plies_to_take_back, render_board
 
 bot_class = load_bot_class()
 
@@ -746,6 +746,75 @@ def human_move():
         move_history.append(f"You: {san}")
 
     return jsonify({'success': True, 'san': san})
+
+
+@app.route('/takeback', methods=['POST'])
+def takeback():
+    """Undo back to your own turn
+
+    A single pop would hand the move back to Stockfish, which would just
+    play again, so this unwinds whole move pairs.
+    """
+    global game_board, move_history, last_engine_info
+
+    with board_lock:
+        if mode != PLAY_MODE:
+            return jsonify({'error': 'Takeback is only for a game you are playing'}), 400
+
+        # Zero means there is nothing of yours to undo. As Black the stack
+        # can hold only Stockfish's opening move, and unwinding that leaves
+        # an empty board with Stockfish to move and nothing prompting it.
+        undone = plies_to_take_back(game_board, human_colour)
+        if not undone:
+            return jsonify({'error': 'No moves to take back'}), 400
+
+        for _ in range(undone):
+            game_board.pop()
+            if move_history:
+                move_history.pop()
+
+        # The line Knightmare reported was for a position that no longer
+        # exists, so showing it would be misleading
+        last_engine_info = None
+
+    return jsonify({'success': True, 'undone': undone})
+
+
+@app.route('/set_position', methods=['POST'])
+def set_position():
+    """Start from a given FEN rather than the opening position
+
+    Useful for seeing how Stockfish handles one particular position, which
+    is not reachable by playing from the start.
+    """
+    global game_board, move_history, last_engine_info
+
+    data = request.get_json(silent=True) or {}
+    fen = str(data.get('fen', '')).strip()
+    if not fen:
+        return jsonify({'error': 'No position given'}), 400
+
+    try:
+        board = chess.Board(fen)
+    except ValueError as exc:
+        return jsonify({'error': f'Could not read that position: {exc}'}), 400
+
+    if not board.is_valid():
+        # The flag names read as NO_WHITE_KING or OPPOSITE_CHECK, which say
+        # what is wrong once the enum decoration is stripped off
+        reasons = ', '.join(
+            flag.name.lower().replace('_', ' ')
+            for flag in chess.Status
+            if flag.name != 'VALID' and flag & board.status()
+        )
+        return jsonify({'error': f'That position is not legal: {reasons}'}), 400
+
+    with board_lock:
+        game_board = board
+        move_history = []
+        last_engine_info = None
+
+    return jsonify({'success': True, 'fen': board.fen()})
 
 
 @app.route('/new_game', methods=['POST'])
