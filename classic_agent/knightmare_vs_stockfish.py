@@ -670,9 +670,17 @@ def download_pgn():
     actually played rather than just White and Black.
     """
     with board_lock:
-        knightmare_white = app.config.get('white_is_knightmare', False)
         stockfish = f'Stockfish level {stockfish_level}'
-        white, black = ('Knightmare', stockfish) if knightmare_white else (stockfish, 'Knightmare')
+        if mode == PLAY_MODE:
+            # Naming Knightmare here would credit the engine with a game a
+            # person actually played
+            opponent, opponent_is_white = 'Human', human_colour == chess.WHITE
+        else:
+            opponent = 'Knightmare'
+            opponent_is_white = app.config.get('white_is_knightmare', False)
+
+        white, black = ((opponent, stockfish) if opponent_is_white
+                        else (stockfish, opponent))
         text = game_pgn(game_board, white, black)
 
     return Response(
