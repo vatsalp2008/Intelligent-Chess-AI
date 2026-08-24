@@ -305,6 +305,65 @@ class TestTableOccupancy(unittest.TestCase):
             KnightmareBot.has_pieces_for_null_move = original
 
 
+class TestDrawnPositions(unittest.TestCase):
+    """A position already drawn by rule is not worth searching on from
+
+    is_game_over() says False for the fifty move rule and threefold
+    repetition, so the search used to carry on from a position whose score
+    it already knew. Mate is the exception: it ends the game before either
+    side can claim, so a mate that is actually available must still be
+    found.
+    """
+
+    def searched(self, fen, depth=3):
+        bot = KnightmareBot()
+        bot.use_book = False
+        board = chess.Board(fen)
+        with contextlib.redirect_stdout(io.StringIO()):
+            move = bot.get_move(board, 600.0, depth)
+        return bot, board, move
+
+    def test_the_clock_running_out_is_treated_as_over(self):
+        board = chess.Board('4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60')
+        self.assertFalse(board.is_game_over())
+        self.assertTrue(KnightmareBot.game_over(board))
+
+    def test_a_threefold_repetition_is_treated_as_over(self):
+        board = chess.Board('4k3/8/8/8/8/8/8/R3K3 w - - 0 1')
+        for uci in ('a1a2', 'e8e7', 'a2a1', 'e7e8',
+                    'a1a2', 'e8e7', 'a2a1', 'e7e8'):
+            board.push(chess.Move.from_uci(uci))
+        self.assertTrue(board.is_repetition(3))
+        self.assertTrue(KnightmareBot.game_over(board))
+
+    def test_an_ordinary_position_is_not_over(self):
+        self.assertFalse(KnightmareBot.game_over(chess.Board()))
+
+    def test_a_drawn_position_scores_zero(self):
+        """Being a queen up does not matter once the clock has run out"""
+        bot = KnightmareBot()
+        drawn = chess.Board('4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60')
+        fresh = chess.Board('4k3/8/8/8/8/8/1Q6/4K3 w - - 0 60')
+        self.assertEqual(bot.evaluate(drawn, 0), 0)
+        self.assertGreater(bot.evaluate(fresh, 0), 500)
+
+    def test_a_legal_move_still_comes_back(self):
+        _, board, move = self.searched('4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60')
+        self.assertIn(move, board.legal_moves)
+
+    def test_an_available_mate_is_still_played(self):
+        """Mate ends the game before either side can claim the draw"""
+        _, board, move = self.searched('6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 100 60')
+        board.push(move)
+        self.assertTrue(board.is_checkmate())
+
+    def test_it_searches_less_than_it_used_to(self):
+        """The whole point: no nodes spent confirming a known zero"""
+        drawn, _, _ = self.searched('4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60')
+        fresh, _, _ = self.searched('4k3/8/8/8/8/8/1Q6/4K3 w - - 0 60')
+        self.assertLess(drawn.nodes, fresh.nodes)
+
+
 class TestClockCheck(unittest.TestCase):
     """The check itself, away from a real search"""
 
