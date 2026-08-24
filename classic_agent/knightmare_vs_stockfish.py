@@ -16,7 +16,12 @@ import time
 import os
 
 from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
-from web_common import legal_by_origin, plies_to_take_back, render_board
+from web_common import (
+    game_finished,
+    legal_by_origin,
+    plies_to_take_back,
+    render_board,
+)
 
 bot_class = load_bot_class()
 
@@ -907,7 +912,9 @@ def get_board():
             'svg': svg,
             'status': status,
             'moves': move_history,
-            'game_over': game_board.is_game_over(),
+            # Counting the claimable draws, or a fifty move position reports
+            # a draw in the status while auto play keeps moving in it
+            'game_over': game_finished(game_board),
             'white_to_move': game_board.turn == chess.WHITE,
             'stockfish_available': stockfish_engine is not None,
             'engine': last_engine_info,
@@ -992,7 +999,7 @@ def human_move():
     uci = str(data.get('move', ''))
 
     with board_lock:
-        if game_board.is_game_over():
+        if game_finished(game_board):
             return jsonify({'error': 'Game is over'}), 400
 
         if not human_to_move():
@@ -1160,7 +1167,7 @@ def make_move():
     global game_board, move_history, stockfish_level, stockfish_time
 
     with board_lock:
-        if game_board.is_game_over():
+        if game_finished(game_board):
             return jsonify({'error': 'Game is over'})
 
         # One side belongs to the person in play mode, so this endpoint
