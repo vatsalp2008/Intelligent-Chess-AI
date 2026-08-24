@@ -11,12 +11,20 @@ Run with:
 """
 
 import os
+import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 import chess
 
-from simple_tournament import ChessEngine, EngineDied, play_game, save_games
+from simple_tournament import (
+    ChessEngine,
+    EngineDied,
+    parse_args,
+    play_game,
+    save_games,
+)
 
 # An engine that exits immediately without speaking UCI
 DEAD_ENGINE = "import sys\nsys.exit(1)\n"
@@ -98,6 +106,59 @@ class TestEngineFailures(unittest.TestCase):
             engine.quit()
             with self.assertRaises(EngineDied):
                 engine.send("isready")
+
+
+class TestBookSetting(unittest.TestCase):
+    """The handshake has to actually carry the setting
+
+    The book chooses between replies at random, so a tournament that leaves
+    it on gives a different result each run and lets the book rather than
+    either engine decide the opening.
+    """
+
+    class Recorder(ChessEngine):
+        """Records the handshake instead of talking to a real engine"""
+
+        def __init__(self):
+            super().__init__("./nothing.py", "Recorder")
+            self.sent = []
+
+        def send(self, command):
+            self.sent.append(command)
+
+        def wait_for(self, token, timeout=5):
+            return [token]
+
+    def handshake(self, use_book):
+        """The commands start() sends, with no subprocess involved
+
+        Popen is replaced rather than pointed at a real script: without
+        this, each test would launch a python3 process on a file that does
+        not exist and leave it behind.
+        """
+        engine = self.Recorder()
+        fake = unittest.mock.MagicMock()
+        fake.stdout = iter(())
+        with unittest.mock.patch.object(subprocess, "Popen", return_value=fake):
+            engine.start(use_book=use_book)
+        return engine.sent
+
+    def test_the_option_is_sent_when_the_book_is_off(self):
+        self.assertIn("setoption name OwnBook value false", self.handshake(False))
+
+    def test_the_option_is_not_sent_when_the_book_is_on(self):
+        self.assertNotIn("setoption name OwnBook value false", self.handshake(True))
+
+    def test_it_comes_after_uciok_and_before_isready(self):
+        """A host sets options between the handshake and the ready check"""
+        sent = self.handshake(False)
+        option = sent.index("setoption name OwnBook value false")
+        self.assertLess(sent.index("uci"), option)
+        self.assertLess(option, sent.index("isready"))
+
+    def test_the_book_is_off_by_default_in_a_tournament(self):
+        with unittest.mock.patch("sys.argv", ["simple_tournament.py"]):
+            self.assertFalse(parse_args().book)
 
 
 class TestShutdown(unittest.TestCase):
