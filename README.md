@@ -24,7 +24,7 @@ Intelligent-Chess-AI/
 │   ├── tune_eval.py            # Sweep Evaluation Weights
 │   ├── tactics.py              # Positions With a Known Best Move
 │   ├── test_bots.py            # UCI Protocol Smoke Test
-│   └── test_*.py               # Unit Suites
+│   └── test_*.py               # Unit Suites (16 files)
 ├── llm_agent/                  # LLM-based Bots (Ollama)
 │   ├── knightmare_llm.py       # LLM Bot (llama3.2)
 │   ├── knightmare_llm_mistral.py   # LLM Bot With Recovery Strategies
@@ -37,7 +37,7 @@ Intelligent-Chess-AI/
 │   ├── benchmark_stockfish.py  # External Strength Baseline
 │   ├── tactics.py              # Positions With a Known Best Move
 │   ├── REPORT.md               # Coursework Writeup
-│   └── test_*.py               # Unit Suites
+│   └── test_*.py               # Unit Suites (9 files)
 ├── run_tests.sh                # Run Every Suite
 ├── requirements.txt            # Unified Dependencies
 ├── requirements-dev.txt        # Just What the Tests Need
