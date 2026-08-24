@@ -682,6 +682,72 @@ def download_pgn():
     )
 
 
+@app.route('/set_mode', methods=['POST'])
+def set_mode():
+    """Switch between watching the engines and playing Stockfish yourself
+
+    Changing mode or colour starts a new game: carrying a half played
+    position across would leave the side just taken over having already
+    moved.
+    """
+    global mode, human_colour
+
+    data = request.get_json(silent=True) or {}
+    requested = data.get('mode', WATCH_MODE)
+    if requested not in (WATCH_MODE, PLAY_MODE):
+        return jsonify({'error': f'unknown mode {requested!r}'}), 400
+
+    wanted = str(data.get('colour', 'white')).strip().lower()
+    if wanted not in ('white', 'black'):
+        return jsonify({'error': f'unknown colour {wanted!r}'}), 400
+
+    with board_lock:
+        mode = requested
+        human_colour = chess.WHITE if wanted == 'white' else chess.BLACK
+        reset_game()
+
+    return jsonify({
+        'success': True,
+        'mode': mode,
+        'colour': 'white' if human_colour == chess.WHITE else 'black',
+    })
+
+
+@app.route('/human_move', methods=['POST'])
+def human_move():
+    """Play the move a person chose, given as UCI
+
+    Rejected rather than silently ignored when it is not their turn or the
+    move is not legal, so the interface can say why.
+    """
+    global game_board, move_history
+
+    data = request.get_json(silent=True) or {}
+    uci = str(data.get('move', ''))
+
+    with board_lock:
+        if game_board.is_game_over():
+            return jsonify({'error': 'Game is over'}), 400
+
+        if not human_to_move():
+            return jsonify({'error': 'It is not your turn'}), 400
+
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            # A pawn reaching the last rank needs a promotion piece
+            return jsonify({'error': f'Could not read the move {uci!r}'}), 400
+
+        if move not in game_board.legal_moves:
+            return jsonify({'error': f'{uci} is not legal here'}), 400
+
+        san = game_board.san(move)
+        game_board.push(move)
+        move_history.append(f"You: {san}")
+
+    return jsonify({'success': True, 'san': san})
+
+
 @app.route('/new_game', methods=['POST'])
 def new_game():
     with board_lock:
