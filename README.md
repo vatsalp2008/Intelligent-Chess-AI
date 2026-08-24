@@ -177,6 +177,31 @@ the threshold now rejects it as well.
 `--sample N` generates positions from played games instead of using the
 fixed set, which gives a steadier signal at the cost of a slower sweep.
 
+### Claimable draws
+
+The fifty move rule and threefold repetition are draws a player *claims*,
+not draws that happen automatically, and python-chess reflects that:
+`board.is_game_over()` returns `False` in both cases. Anything that trusts
+it treats a dead-drawn position as a live game. This turned up in three
+separate places:
+
+- The **evaluation** scored a fifty-move position on material, so a queen
+  up meant +9.84 in a position worth nothing. Fixed earlier by checking
+  `halfmove_clock` and `is_repetition(3)` directly.
+- Both **web interfaces** reported `game_over: false` while the status line
+  said "Draw - 50 move rule", so auto play kept making moves in a finished
+  game and the move endpoints kept accepting them.
+- The **search** carried on from such a position, spending 1,575 nodes on a
+  queen-up position whose score it already knew was zero.
+
+Mate is the exception and has to keep working: it ends the game before
+either side can claim, so a mate that is genuinely available is still
+found. A mate several moves deep is correctly scored as a draw, because the
+opponent claims before it arrives.
+
+The shape of the mistake is worth remembering: a library predicate that
+looks like it answers "is this over?" may be answering a narrower question.
+
 ### Things tried that did not survive measurement
 
 Keeping these on record saves re-deriving them. Every percentage below was
