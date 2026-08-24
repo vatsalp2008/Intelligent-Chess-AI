@@ -34,6 +34,21 @@ board_lock = threading.Lock()
 # What Knightmare last reported about its search, shown in the interface
 last_engine_info = None
 
+# Watching two engines play, or playing one of them yourself. The opponent
+# in play mode is Stockfish, since a person wanting a real game wants the
+# stronger of the two and its level is already adjustable here.
+WATCH_MODE = "watch"
+PLAY_MODE = "play"
+mode = WATCH_MODE
+
+# Which side the person has in play mode
+human_colour = chess.WHITE
+
+
+def human_to_move():
+    """True when the interface is waiting for a person rather than an engine"""
+    return mode == PLAY_MODE and game_board.turn == human_colour
+
 # Range Stockfish accepts for its Skill Level option
 MIN_SKILL_LEVEL = 0
 MAX_SKILL_LEVEL = 20
@@ -597,12 +612,13 @@ def get_board():
 
     with board_lock:
 
-        # Drawn from Knightmare's side, so the engine being developed is
-        # the one at the bottom of the board
-        svg = render_board(
-            game_board,
-            flipped=not app.config.get('white_is_knightmare', False),
-        )
+        # Drawn from your side when you are playing, and otherwise from
+        # Knightmare's, so the engine being developed is at the bottom
+        if mode == PLAY_MODE:
+            flipped = human_colour == chess.BLACK
+        else:
+            flipped = not app.config.get('white_is_knightmare', False)
+        svg = render_board(game_board, flipped=flipped)
 
         # Determine game status
         if game_board.is_checkmate():
@@ -638,6 +654,9 @@ def get_board():
             'stockfish_available': stockfish_engine is not None,
             'engine': last_engine_info,
             'knightmare_is_white': app.config.get('white_is_knightmare', False),
+            'mode': mode,
+            'colour': 'white' if human_colour == chess.WHITE else 'black',
+            'your_turn': human_to_move(),
             # Grouped by origin square, so the interface can show where a
             # piece may go without knowing how chess works
             'legal': legal_by_origin(game_board),
