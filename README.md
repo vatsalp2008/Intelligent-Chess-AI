@@ -256,6 +256,13 @@ is trying to test never gets played.
 An unknown option name is reported on an `info string` rather than ignored,
 so a host that has misspelled one can see that its setting did nothing.
 
+`Hash` is honest but has little practical effect at these depths, and it is
+worth saying so rather than implying otherwise. Measured occupancy: a depth
+5 search of a busy middlegame position stores about 7,900 entries, and the
+peak across a whole 60 ply game at depth 3 was 9,548 — under 5% of the
+default cap. Lowering `Hash` far enough would bind, but raising it changes
+nothing, because the table never fills.
+
 ### Time control
 
 `go` understands `movetime`, `depth`, `infinite`, and the usual
