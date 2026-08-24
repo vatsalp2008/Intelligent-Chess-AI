@@ -206,8 +206,28 @@ answer every time — but it does not remove sampling variance: 24 games come
 from 12 openings, and a different opening set could move a one-game margin
 either way. Reproducible is not the same as representative.
 
-`NULL_MOVE_REDUCTION` has not been re-run, so it stays recorded as "no
-reason to change" rather than as a measured optimum.
+`NULL_MOVE_REDUCTION` has now been re-run too, and the answer is more
+interesting than a number. At depth 3 it scores exactly 50% against both 1
+and 3 — because at depth 3 the constant is never read. `NULL_MOVE_MIN_DEPTH`
+is 4, so the null move branch is not reached at all. Instrumenting a
+middlegame position gives the shape of it:
+
+| Root depth | Times the null move branch was considered |
+| ---------- | ----------------------------------------- |
+| 2          | 0                                         |
+| 3          | 0                                         |
+| 4          | 1                                         |
+| 5          | 50                                        |
+
+So the original claim that "2 beat both 1 and 3" was measuring noise on a
+code path that never executed. Worse, `DEFAULT_MAX_DEPTH` is 4, which means
+null move pruning fires about once per search in ordinary play: it is
+carrying complexity and risk for almost no effect at the depths this engine
+actually runs at.
+
+The general lesson, which cost two wasted measurements to learn: before
+measuring a parameter, check that the code reading it actually runs under
+the conditions being measured.
 
 ### Options
 
