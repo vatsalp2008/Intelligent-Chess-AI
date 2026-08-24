@@ -402,6 +402,10 @@ HTML = """
             <button onclick="swapColour()" id="colour-btn">♟️ Play As: White</button>
             <button onclick="takeBack()" id="undo-btn">↩️ Take Back</button>
 
+            <h3>Set Up A Position</h3>
+            <input type="text" id="fen" placeholder="Paste a FEN" />
+            <button onclick="loadFen()">📋 Load</button>
+
             <h3>📋 Move History</h3>
             <div id="moves"></div>
         </div>
@@ -411,6 +415,14 @@ HTML = """
         /* Pieces are drawn over the square rectangles, so without this a
            click on a piece never reaches the square under it */
         #board use { pointer-events: none; }
+        #fen {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 12px;
+        }
     </style>
 
     <script>
@@ -679,6 +691,27 @@ HTML = """
             // no side of yours to take a move back for when watching
             document.getElementById('auto-btn').disabled = playMode;
             document.getElementById('undo-btn').disabled = !playMode;
+        }
+
+        function loadFen() {
+            const box = document.getElementById('fen');
+            fetch('/set_position', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({fen: box.value})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    // Show the position as the library writes it, which is
+                    // not always exactly what was pasted in
+                    box.value = data.fen;
+                    selected = null;
+                    return updateBoard();
+                });
         }
 
         function takeBack() {
