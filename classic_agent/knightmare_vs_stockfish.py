@@ -828,11 +828,22 @@ def make_move():
         if game_board.is_game_over():
             return jsonify({'error': 'Game is over'})
 
+        # One side belongs to the person in play mode, so this endpoint
+        # must not move for them. Without the guard an engine answers on
+        # their behalf and they never get a turn.
+        if human_to_move():
+            return jsonify({'error': 'Waiting for your move'}), 409
+
         try:
             white_is_knightmare = app.config.get('white_is_knightmare', False)
 
+            if mode == PLAY_MODE:
+                # Stockfish is the opponent whichever side you took, and
+                # its level is what makes the game winnable or not
+                move = get_stockfish_move(game_board, stockfish_level, stockfish_time)
+                player = f"Stockfish(L{stockfish_level})"
             # Determine whose turn it is and which engine to use
-            if game_board.turn == chess.WHITE:
+            elif game_board.turn == chess.WHITE:
                 if white_is_knightmare:
                     # Knightmare plays White
                     move = get_knightmare_move(game_board)
@@ -854,7 +865,9 @@ def make_move():
             if move and move in game_board.legal_moves:
                 san = game_board.san(move)
                 game_board.push(move)
-                move_history.append(f"{san}")  # Just the move notation
+                # Named in play mode, so the list reads as a game against
+                # someone rather than an unattributed run of moves
+                move_history.append(f"{player}: {san}" if mode == PLAY_MODE else san)
                 return jsonify({'success': True})
             else:
                 return jsonify({'error': f'{player} failed to make valid move'})
