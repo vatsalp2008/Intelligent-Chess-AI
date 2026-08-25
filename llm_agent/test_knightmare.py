@@ -6,6 +6,8 @@ Run with:
     python3 -m unittest test_knightmare
 """
 
+import contextlib
+import io
 import time
 import unittest
 
@@ -118,6 +120,49 @@ class TestDrawDetection(unittest.TestCase):
     def test_material_lead_still_counts_before_the_clock_runs_out(self):
         board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
         self.assertGreater(self.bot.evaluate_board(board), 0)
+
+    def test_a_claimable_draw_counts_as_the_end_of_the_search(self):
+        """is_game_over() says False for these, because they need claiming"""
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 100 60")
+        self.assertFalse(board.is_game_over())
+        self.assertTrue(KnightmareFast.game_over(board))
+
+    def test_a_repetition_counts_as_the_end_of_the_search(self):
+        board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
+        for uci in ("d1d2", "e8e7", "d2d1", "e7e8") * 2:
+            board.push(chess.Move.from_uci(uci))
+        self.assertTrue(KnightmareFast.game_over(board))
+
+    def test_an_ordinary_position_is_not_the_end(self):
+        self.assertFalse(KnightmareFast.game_over(chess.Board()))
+
+    def test_a_drawn_position_is_not_searched_on_from(self):
+        """The score is already known, so the nodes would be wasted"""
+        bot = KnightmareFast()
+        bot.use_book = False
+        drawn = chess.Board("4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60")
+        with contextlib.redirect_stdout(io.StringIO()):
+            move = bot.get_best_move(drawn, 600.0, 3)
+        self.assertIn(move, drawn.legal_moves)
+        self.assertLess(bot.nodes, 50)
+
+    def test_a_live_position_still_gets_searched(self):
+        bot = KnightmareFast()
+        bot.use_book = False
+        fresh = chess.Board("4k3/8/8/8/8/8/1Q6/4K3 w - - 0 60")
+        with contextlib.redirect_stdout(io.StringIO()):
+            bot.get_best_move(fresh, 600.0, 3)
+        self.assertGreater(bot.nodes, 100)
+
+    def test_an_available_mate_is_still_found(self):
+        """Mate ends the game before either side can claim the draw"""
+        bot = KnightmareFast()
+        bot.use_book = False
+        board = chess.Board("6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 100 60")
+        with contextlib.redirect_stdout(io.StringIO()):
+            move = bot.get_best_move(board, 600.0, 3)
+        board.push(move)
+        self.assertTrue(board.is_checkmate())
 
 
 class TestOpeningBook(unittest.TestCase):
