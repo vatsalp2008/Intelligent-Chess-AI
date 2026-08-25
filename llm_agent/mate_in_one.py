@@ -30,18 +30,15 @@ def uci(msg: str):
         print("uciok")
     elif msg == "isready":
         print("readyok")
-    elif msg.startswith("position startpos moves"):
-        board.clear()
+    elif msg == "ucinewgame":
         board.set_fen(chess.STARTING_FEN)
-        moves = msg.split()[3:]
-        for move in moves:
-            board.push(chess.Move.from_uci(move))
-    elif msg.startswith("position fen"):
-        fen = msg.removeprefix("position fen ")
-        board.set_fen(fen)
+    elif msg.startswith("position"):
+        random_chess_bot.apply_position(board, msg)
     elif msg.startswith("go"):
-        move = make_move(board) 
-        print(f"bestmove {move}")
+        move = make_move(board)
+        # A finished position has no move to return, and sending nothing
+        # leaves the host waiting for a reply that never comes
+        print(f"bestmove {move}" if move else "bestmove 0000")
     elif msg == "quit":
         sys.exit(0)
     return

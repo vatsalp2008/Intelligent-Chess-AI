@@ -10,6 +10,45 @@ def make_random_move(b: chess.Board):
     moves = list(b.legal_moves)
     return random.choice(moves) if moves else None
 
+def apply_position(b: chess.Board, msg: str):
+    '''Set the board from a position command
+
+    Shared with mate_in_one.py, which used to push every move in the list
+    without checking it at all: an illegal or unreadable move raised, the
+    board was left half replayed, and the host got no reply.
+
+    Handles both forms in one place. "position startpos" with no move list
+    used to match nothing, so a new game began from wherever the previous
+    one ended.
+    '''
+    parts = msg.split()
+    moves_at = parts.index("moves") if "moves" in parts else len(parts)
+
+    if "startpos" in parts:
+        b.set_fen(chess.STARTING_FEN)
+    elif "fen" in parts:
+        # Only the FEN fields, not the move list that may follow it:
+        # passing both to set_fen raised and reset to the opening
+        fen = " ".join(parts[parts.index("fen") + 1:moves_at])
+        try:
+            b.set_fen(fen)
+        except ValueError:
+            print(f"info string could not read fen {fen!r}")
+            b.set_fen(chess.STARTING_FEN)
+
+    for move in parts[moves_at + 1:]:
+        try:
+            parsed = chess.Move.from_uci(move)
+        except ValueError:
+            print(f"info string could not read move {move!r}, stopping replay")
+            break
+        if parsed not in b.legal_moves:
+            print(f"info string {move} is not legal here, stopping replay")
+            break
+        b.push(parsed)
+    return b
+
+
 def uci(msg: str):
     '''Returns result of UCI protocol given passed message'''
     if msg == "uci":
@@ -23,34 +62,7 @@ def uci(msg: str):
         # final position, because nothing else resets the board
         board.set_fen(chess.STARTING_FEN)
     elif msg.startswith("position"):
-        # One branch for both forms. "position startpos" with no move list
-        # used to match nothing at all, so a new game began from wherever
-        # the previous one ended.
-        parts = msg.split()
-        moves_at = parts.index("moves") if "moves" in parts else len(parts)
-
-        if "startpos" in parts:
-            board.set_fen(chess.STARTING_FEN)
-        elif "fen" in parts:
-            # Only the FEN fields, not the move list that may follow it:
-            # passing both to set_fen raised and reset to the opening
-            fen = " ".join(parts[parts.index("fen") + 1:moves_at])
-            try:
-                board.set_fen(fen)
-            except ValueError:
-                print(f"info string could not read fen {fen!r}")
-                board.set_fen(chess.STARTING_FEN)
-
-        for move in parts[moves_at + 1:]:
-            try:
-                parsed = chess.Move.from_uci(move)
-            except ValueError:
-                print(f"info string could not read move {move!r}, stopping replay")
-                break
-            if parsed not in board.legal_moves:
-                print(f"info string {move} is not legal here, stopping replay")
-                break
-            board.push(parsed)
+        apply_position(board, msg)
     elif msg.startswith("go"):
         move = make_random_move(board)
         # A finished position used to raise here and send nothing at all,
