@@ -202,6 +202,26 @@ opponent claims before it arrives.
 The shape of the mistake is worth remembering: a library predicate that
 looks like it answers "is this over?" may be answering a narrower question.
 
+There is a second, sharper version of the same trap. The baseline engine
+used `can_claim_fifty_moves()`, which sounds like exactly the right
+question but is **true one ply early**: it reports that the side to move
+*could* reach the rule with their move. At a halfmove clock of 99 the game
+is not drawn, and a win still on the board still wins — a mate delivered
+there ends the game before the rule can be invoked. The engine was scoring
+those positions 0 and, once the search learned to stop at drawn positions,
+declining to search them at all.
+
+| Halfmove clock | `halfmove_clock >= 100` | `can_claim_fifty_moves()` | Actually drawn |
+| -------------- | ----------------------- | ------------------------- | -------------- |
+| 98             | false                   | false                     | no             |
+| 99             | false                   | **true**                  | **no**         |
+| 100            | true                    | true                      | yes            |
+
+Both engines now use `halfmove_clock >= 100`. The disagreement was found by
+a drift test written to check that the two engines' copies of this logic
+agreed — it failed on its first run, which is the best argument for writing
+that kind of test at all.
+
 ### Things tried that did not survive measurement
 
 Keeping these on record saves re-deriving them. Every percentage below was
