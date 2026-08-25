@@ -23,7 +23,7 @@ import json
 # Shared with the llama bot rather than copied: both need the same answer
 # to "which moves are worth putting in front of a model", and both live in
 # this directory, so there is no package boundary to cross.
-from knightmare_llm import moves_for_prompt
+from knightmare_llm import moves_for_prompt, replay_moves
 
 # Source square, destination square and an optional promotion piece
 UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
@@ -338,45 +338,19 @@ def uci(msg):
             global_bot.move_number = 0
         
     elif msg.startswith("position"):
-        parts = msg.split()
-        
+        moves_start = msg.find("moves")
+        moves_text = msg[moves_start + 6:].strip() if moves_start != -1 else ""
+
         if "startpos" in msg:
-            global_board = chess.Board()
-            moves_start = msg.find("moves")
-            if moves_start != -1:
-                moves_str = msg[moves_start + 6:].strip()
-                if moves_str:
-                    for move_uci in moves_str.split():
-                        try:
-                            move = chess.Move.from_uci(move_uci)
-                            if move in global_board.legal_moves:
-                                global_board.push(move)
-                        except ValueError:
-                            pass
-        
+            global_board = replay_moves(chess.Board(), moves_text)
         elif "fen" in msg:
             fen_start = msg.find("fen") + 4
-            moves_start = msg.find("moves")
-            
-            if moves_start == -1:
-                fen = msg[fen_start:].strip()
-            else:
-                fen = msg[fen_start:moves_start].strip()
-            
+            fen = (msg[fen_start:moves_start] if moves_start != -1
+                   else msg[fen_start:]).strip()
             try:
-                global_board = chess.Board(fen)
-                
-                if moves_start != -1:
-                    moves_str = msg[moves_start + 6:].strip()
-                    if moves_str:
-                        for move_uci in moves_str.split():
-                            try:
-                                move = chess.Move.from_uci(move_uci)
-                                if move in global_board.legal_moves:
-                                    global_board.push(move)
-                            except ValueError:
-                                pass
+                global_board = replay_moves(chess.Board(fen), moves_text)
             except ValueError:
+                print(f"info string could not read fen {fen!r}")
                 global_board = chess.Board()
                 
     elif msg.startswith("go"):

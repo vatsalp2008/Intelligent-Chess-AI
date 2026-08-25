@@ -190,6 +190,28 @@ def parse_movetime(msg, default=DEFAULT_MOVE_TIME):
 global_bot = None
 global_board = chess.Board()
 
+def replay_moves(board, moves_text):
+    """Push the moves from a position command onto the board
+
+    Stops at the first move that will not apply, rather than skipping it.
+    Skipping looks harmless but is not: every later move in the list is
+    then played into a position the host never described, and some of them
+    will be legal there, so the engine ends up analysing a game nobody is
+    playing. Stopping keeps the board a real prefix of the intended game.
+    """
+    for uci_str in moves_text.split():
+        try:
+            move = chess.Move.from_uci(uci_str)
+        except ValueError:
+            print(f"info string could not read move {uci_str!r}, stopping replay")
+            break
+        if move not in board.legal_moves:
+            print(f"info string {uci_str} is not legal here, stopping replay")
+            break
+        board.push(move)
+    return board
+
+
 def uci(msg):
     global global_board, global_bot
     
@@ -209,36 +231,19 @@ def uci(msg):
         global_board = chess.Board()
         
     elif msg.startswith("position"):
+        moves_start = msg.find("moves")
+        moves_text = msg[moves_start + 6:].strip() if moves_start != -1 else ""
+
         if "startpos" in msg:
-            global_board = chess.Board()
-            moves_start = msg.find("moves")
-            if moves_start != -1:
-                moves_str = msg[moves_start + 6:].strip()
-                if moves_str:
-                    for move_uci in moves_str.split():
-                        try:
-                            move = chess.Move.from_uci(move_uci)
-                            if move in global_board.legal_moves:
-                                global_board.push(move)
-                        except ValueError:
-                            pass
+            global_board = replay_moves(chess.Board(), moves_text)
         elif "fen" in msg:
             fen_start = msg.find("fen") + 4
-            moves_start = msg.find("moves")
-            fen = msg[fen_start:moves_start].strip() if moves_start != -1 else msg[fen_start:].strip()
+            fen = (msg[fen_start:moves_start] if moves_start != -1
+                   else msg[fen_start:]).strip()
             try:
-                global_board = chess.Board(fen)
-                if moves_start != -1:
-                    moves_str = msg[moves_start + 6:].strip()
-                    if moves_str:
-                        for move_uci in moves_str.split():
-                            try:
-                                move = chess.Move.from_uci(move_uci)
-                                if move in global_board.legal_moves:
-                                    global_board.push(move)
-                            except ValueError:
-                                pass
+                global_board = replay_moves(chess.Board(fen), moves_text)
             except ValueError:
+                print(f"info string could not read fen {fen!r}")
                 global_board = chess.Board()
                 
     elif msg.startswith("go"):
