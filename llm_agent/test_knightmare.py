@@ -121,6 +121,30 @@ class TestDrawDetection(unittest.TestCase):
         board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 0 1")
         self.assertGreater(self.bot.evaluate_board(board), 0)
 
+    def test_the_clock_at_ninety_nine_is_not_yet_a_draw(self):
+        """can_claim_fifty_moves() is True here, one ply too early
+
+        It reports that the side to move *could* reach the rule with their
+        move. The game is not drawn yet, and a win still on the board still
+        wins, so scoring 0 here threw away real material.
+        """
+        board = chess.Board("4k3/8/8/8/8/8/1Q6/4K3 w - - 99 60")
+        self.assertTrue(board.can_claim_fifty_moves())
+        self.assertGreater(self.bot.evaluate_board(board, 0), 500)
+        self.assertFalse(KnightmareFast.game_over(board))
+
+    def test_the_clock_at_one_hundred_is_a_draw(self):
+        board = chess.Board("4k3/8/8/8/8/8/1Q6/4K3 w - - 100 60")
+        self.assertEqual(self.bot.evaluate_board(board, 0), 0)
+        self.assertTrue(KnightmareFast.game_over(board))
+
+    def test_a_mate_at_clock_ninety_nine_still_scores_as_mate(self):
+        """The mate ends the game before the rule can be invoked"""
+        board = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 99 60")
+        self.assertTrue(board.is_checkmate())
+        # White-relative score, and Black is the side that has been mated
+        self.assertGreater(self.bot.evaluate_board(board, 0), 1000)
+
     def test_a_claimable_draw_counts_as_the_end_of_the_search(self):
         """is_game_over() says False for these, because they need claiming"""
         board = chess.Board("4k3/8/8/8/8/8/8/3QK3 w - - 100 60")
