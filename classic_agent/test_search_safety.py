@@ -424,6 +424,40 @@ class TestUciRoundTrip(unittest.TestCase):
         move = self.bot.get_move(board, NO_TIME_LIMIT, 2)
         self.assertIn(move, board.legal_moves)
 
+    def test_a_bad_move_in_the_list_stops_the_replay(self):
+        """Skipping it would leave a game the host never sent"""
+        board = parse_position("position startpos moves e2e4 d7d6 d7d5 g1f3")
+        self.assertEqual([m.uci() for m in board.move_stack], ["e2e4", "d7d6"])
+
+    def test_an_unreadable_move_stops_the_replay(self):
+        board = parse_position("position startpos moves e2e4 zzz e7e5")
+        self.assertEqual([m.uci() for m in board.move_stack], ["e2e4"])
+
+    def test_the_reason_is_reported(self):
+        """A short game is hard to diagnose without being told why"""
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            parse_position("position startpos moves e2e4 d7d6 d7d5")
+        self.assertIn("not legal", buffer.getvalue())
+
+    def test_what_is_replayed_is_always_a_prefix(self):
+        for text in ("e2e4 e7e5", "e2e4 zzz", "e2e4 d7d6 d7d5 g1f3", "nonsense"):
+            with self.subTest(moves=text):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    board = parse_position(f"position startpos moves {text}")
+                played = [m.uci() for m in board.move_stack]
+                self.assertEqual(played, text.split()[:len(played)])
+
+    def test_a_move_list_after_a_fen_is_replayed_too(self):
+        board = parse_position(
+            "position fen 8/8/4k3/8/8/8/4P3/4K3 w - - 0 1 moves e2e4 e6d6")
+        self.assertEqual([m.uci() for m in board.move_stack], ["e2e4", "e6d6"])
+
+    def test_an_unreadable_fen_falls_back_to_the_start(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            board = parse_position("position fen not-a-fen")
+        self.assertEqual(board.fen(), chess.STARTING_FEN)
+
     def test_go_budget_is_respected_by_the_search(self):
         """A depth limit from the go line must bound the search"""
         time_limit, max_depth = parse_go("go depth 2")
