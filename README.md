@@ -144,6 +144,31 @@ Any margin recorded before this fix should be read as much softer than it
 looks. Games also finish in roughly half the plies now, so matches run
 faster.
 
+With the harness correct, the identical-engine check still gives exactly
+50% over 24 games, twice running — and the outcome breakdown explains why
+every result in this file is so close to even:
+
+| Outcome | Games  |
+| ------- | ------ |
+| 1-0     | 4      |
+| 0-1     | 4      |
+| draw    | **16** |
+
+Two thirds of the games between identical engines are drawn, and the
+decisive ones split evenly, which is exactly right. But it means the
+**effective sample size is about eight games, not twenty four**: only the
+decisive games carry information about which engine is better. A "54%"
+result is 13/24, which is a single decisive game's difference out of eight
+that could have gone either way.
+
+That is the honest reading of every margin in this file. The engine is
+strong enough against itself that most games peter out into a repetition,
+and distinguishing two near-identical versions would need either far more
+openings or a deliberately sharper set of starting positions. Twelve
+openings played from both sides is not enough resolution for the
+differences being chased, and no amount of re-running changes that, because
+the harness is deterministic — the same games come back every time.
+
 Use `--seconds` instead when the change was about speed. A faster search
 cannot change what a fixed-depth search returns, so ordering and pruning
 work only shows up under a clock.
