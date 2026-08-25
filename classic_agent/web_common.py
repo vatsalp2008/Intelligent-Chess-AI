@@ -57,8 +57,17 @@ def game_finished(board):
     repetition, because those are claimable rather than automatic. An
     interface that trusts it will report a drawn position while still
     offering moves in it.
+
+    The conditions are checked directly rather than through
+    is_game_over(claim_draw=True), which is true one ply early: that asks
+    can_claim_fifty_moves(), which reports that the side to move *could*
+    reach the rule with their move. At a halfmove clock of 99 the game is
+    not drawn, and using that answer refused a player the mate that would
+    have won it.
     """
-    return board.is_game_over(claim_draw=True)
+    if board.is_game_over():
+        return True
+    return board.halfmove_clock >= 100 or board.is_repetition(3)
 
 
 def draw_text(board):

@@ -157,6 +157,31 @@ class TestGameFinished(unittest.TestCase):
         self.assertFalse(board.is_game_over())
         self.assertTrue(game_finished(board))
 
+    def test_one_move_short_of_the_rule_is_not_finished(self):
+        """is_game_over(claim_draw=True) says True here, one ply early
+
+        It asks can_claim_fifty_moves(), which reports that the side to
+        move could reach the rule with their move. Using that answer
+        refused a player the mate that would have won the game.
+        """
+        board = chess.Board('4k3/8/8/8/8/8/4P3/4K3 w - - 99 60')
+        self.assertTrue(board.is_game_over(claim_draw=True))
+        self.assertFalse(game_finished(board))
+
+    def test_a_mate_at_clock_ninety_nine_is_still_playable(self):
+        board = chess.Board('6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 99 60')
+        self.assertFalse(game_finished(board))
+        board.push(chess.Move.from_uci('e1e8'))
+        self.assertTrue(board.is_checkmate())
+        self.assertTrue(game_finished(board))
+
+    def test_a_repetition_finishes_it(self):
+        board = chess.Board('4k3/8/8/8/8/8/8/R3K3 w - - 0 1')
+        for uci in ('a1a2', 'e8e7', 'a2a1', 'e7e8') * 2:
+            board.push(chess.Move.from_uci(uci))
+        self.assertTrue(board.is_repetition(3))
+        self.assertTrue(game_finished(board))
+
 
 class TestPlayerResultText(unittest.TestCase):
     def test_a_live_game_has_no_result(self):
