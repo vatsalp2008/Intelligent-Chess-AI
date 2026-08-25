@@ -23,7 +23,7 @@ import json
 # Shared with the llama bot rather than copied: both need the same answer
 # to "which moves are worth putting in front of a model", and both live in
 # this directory, so there is no package boundary to cross.
-from knightmare_llm import moves_for_prompt, replay_moves
+from knightmare_llm import moves_for_prompt, parse_setoption, replay_moves
 
 # Source square, destination square and an optional promotion piece
 UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
@@ -322,7 +322,31 @@ def uci(msg):
     if msg == "uci":
         print("id name LLM Chess Bot Mistral")
         print("id author Vatsal Patel")
+        # Comparing models is what this bot is for, and an environment
+        # variable means restarting the process between runs
+        print(f"option name Model type string default {DEFAULT_MODEL}")
         print("uciok")
+        sys.stdout.flush()
+
+    elif msg.startswith("setoption"):
+        if global_bot is None:
+            global_bot = KnightmareLLMRecovery()
+        parsed = parse_setoption(msg)
+        if parsed is None:
+            print(f"info string could not read: {msg}")
+        elif parsed[0].strip().lower() != "model":
+            print(f"info string ignoring unknown option {parsed[0]}")
+        elif not (parsed[1] or "").strip():
+            print("info string Model needs a name")
+        else:
+            global_bot.model_name = parsed[1].strip()
+            print(f"info string Model set to {global_bot.model_name}")
+        sys.stdout.flush()
+
+    elif msg in ("stop", "ponderhit"):
+        # The model round trips happen on this thread, so by the time
+        # either can be read the move has already been sent
+        print("info string nothing in progress to stop")
         sys.stdout.flush()
         
     elif msg == "isready":
