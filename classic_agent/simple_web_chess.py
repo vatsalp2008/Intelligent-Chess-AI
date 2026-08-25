@@ -21,6 +21,7 @@ THINK_SECONDS = 1.0
 
 from bot_loader import ask_engine, game_pgn, load_bot_class, random_move
 from web_common import (
+    draw_text,
     game_finished,
     legal_by_origin,
     plies_to_take_back,
@@ -620,14 +621,10 @@ def get_board():
             else:
                 winner = "White (Random)" if loser == chess.BLACK else "Black (Knightmare)"
                 status = f"Checkmate! {winner} wins!"
-        elif game_board.is_stalemate():
-            status = "Stalemate - Draw!"
-        elif game_board.is_insufficient_material():
-            status = "Draw - Insufficient material"
-        elif game_board.is_fifty_moves():
-            status = "Draw - 50 move rule"
-        elif game_board.is_game_over():
-            status = "Game Over"
+        elif draw_text(game_board) is not None:
+            # Shared with the other interface, and checks the claimable
+            # draws directly rather than behind is_game_over()
+            status = draw_text(game_board)
         else:
             if mode == PLAY_MODE:
                 # Phrased as a prompt rather than "X to move", which reads
