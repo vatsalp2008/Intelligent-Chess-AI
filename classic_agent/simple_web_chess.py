@@ -24,6 +24,7 @@ from web_common import (
     draw_text,
     game_finished,
     legal_by_origin,
+    player_result_text,
     plies_to_take_back,
     render_board,
 )
@@ -611,15 +612,12 @@ def get_board():
 
         # Determine game status
         if game_board.is_checkmate():
-            # The side to move is the one that has been mated
-            loser = game_board.turn
             if mode == PLAY_MODE:
-                # Naming the colours would tell someone playing Black that
-                # "White wins", leaving them to work out that they lost
-                status = ("Checkmate - you lost" if loser == human_colour
-                          else "Checkmate - you win!")
+                status = player_result_text(game_board, human_colour)
             else:
-                winner = "White (Random)" if loser == chess.BLACK else "Black (Knightmare)"
+                # The side to move is the one that has been mated
+                winner = ("White (Random)" if game_board.turn == chess.BLACK
+                          else "Black (Knightmare)")
                 status = f"Checkmate! {winner} wins!"
         elif draw_text(game_board) is not None:
             # Shared with the other interface, and checks the claimable
