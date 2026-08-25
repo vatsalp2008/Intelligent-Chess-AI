@@ -481,6 +481,26 @@ This is the kind of defect no amount of testing the parser would have
 found: every move the bot played was legal and every reply parsed cleanly.
 The bug was in what the question left out.
 
+### Options
+
+Both LLM bots advertise the model they will use, so a host can switch
+between models without restarting the process and without setting an
+environment variable. The llama bot also exposes how many times it will
+re-ask before giving up.
+
+| Option     | Type   | Where            | Effect                            |
+| ---------- | ------ | ---------------- | --------------------------------- |
+| `Model`    | string | both bots        | Which Ollama model to prompt      |
+| `Attempts` | spin   | llama bot        | Re-asks before falling back       |
+
+Comparing two models across a tournament is the main thing these bots are
+for, and doing it through `KNIGHTMARE_MODEL` meant a restart between runs.
+
+`stop` and `ponderhit` are answered rather than silently swallowed. The
+model round trip happens on the same thread that reads commands, so by the
+time either can be read the move has already been sent — but a host waiting
+for any reply at all should not be left hanging.
+
 ### Usage
 
 **Run the Tournament**
