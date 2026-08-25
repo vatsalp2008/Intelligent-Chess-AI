@@ -13,11 +13,17 @@ import unittest
 import chess
 
 from knightmare_llm import (
+    DEFAULT_MODEL,
     DEFAULT_MOVE_TIME,
+    LLMChessBot,
+    UCI_OPTIONS,
+    apply_option,
+    option_lines,
     MAX_MOVES_SHOWN,
     moves_for_prompt,
     parse_move,
     parse_movetime,
+    parse_setoption,
     replay_moves,
 )
 from knightmare_llm_mistral import KnightmareLLMRecovery, default_log_path
@@ -341,6 +347,101 @@ class TestReplayMoves(unittest.TestCase):
         start = chess.Board("8/8/4k3/8/8/8/4P3/4K3 w - - 0 1")
         board = replay_moves(start, "e2e4 e6d6")
         self.assertEqual([m.uci() for m in board.move_stack], ["e2e4", "e6d6"])
+
+
+class TestUciOptions(unittest.TestCase):
+    """Options a host can set on the LLM bot
+
+    Comparing two models is the point of this bot, and doing it through an
+    environment variable means restarting the process between runs.
+    """
+
+    def setUp(self):
+        self.bot = LLMChessBot()
+
+    def test_every_option_is_advertised(self):
+        names = [line.split()[2] for line in option_lines()]
+        self.assertEqual(names, [entry[0] for entry in UCI_OPTIONS])
+
+    def test_the_model_option_is_a_string(self):
+        line = next(l for l in option_lines() if "Model" in l)
+        self.assertIn("type string", line)
+        self.assertIn(f"default {DEFAULT_MODEL}", line)
+
+    def test_the_attempts_option_carries_its_range(self):
+        line = next(l for l in option_lines() if "Attempts" in l)
+        self.assertIn("type spin", line)
+        self.assertIn("min 1", line)
+        self.assertIn("max 10", line)
+
+    def test_everything_advertised_can_be_set(self):
+        for entry in UCI_OPTIONS:
+            with self.subTest(option=entry[0]):
+                self.assertNotIn("unknown",
+                                 apply_option(self.bot, entry[0], str(entry[2])))
+
+    def test_the_model_can_be_changed(self):
+        apply_option(self.bot, "Model", "mistral")
+        self.assertEqual(self.bot.model_name, "mistral")
+
+    def test_an_empty_model_name_is_refused(self):
+        before = self.bot.model_name
+        self.assertIn("needs a name", apply_option(self.bot, "Model", "  "))
+        self.assertEqual(self.bot.model_name, before)
+
+    def test_the_attempt_count_can_be_changed(self):
+        apply_option(self.bot, "Attempts", "5")
+        self.assertEqual(self.bot.attempts, 5)
+
+    def test_the_attempt_count_is_clamped(self):
+        apply_option(self.bot, "Attempts", "999")
+        self.assertEqual(self.bot.attempts, 10)
+        apply_option(self.bot, "Attempts", "0")
+        self.assertEqual(self.bot.attempts, 1)
+
+    def test_a_non_numeric_attempt_count_is_refused(self):
+        before = self.bot.attempts
+        self.assertIn("needs a number", apply_option(self.bot, "Attempts", "many"))
+        self.assertEqual(self.bot.attempts, before)
+
+    def test_names_are_matched_without_case(self):
+        apply_option(self.bot, "model", "phi")
+        self.assertEqual(self.bot.model_name, "phi")
+
+    def test_an_unknown_option_says_so(self):
+        self.assertIn("unknown", apply_option(self.bot, "Nonsense", "1"))
+
+    def test_an_unknown_option_changes_nothing(self):
+        before = (self.bot.model_name, self.bot.attempts)
+        apply_option(self.bot, "Nonsense", "1")
+        self.assertEqual((self.bot.model_name, self.bot.attempts), before)
+
+    def test_setoption_is_parsed(self):
+        self.assertEqual(parse_setoption("setoption name Model value mistral"),
+                         ("Model", "mistral"))
+
+    def test_a_missing_name_is_refused(self):
+        self.assertIsNone(parse_setoption("setoption name"))
+        self.assertIsNone(parse_setoption("go depth 3"))
+
+    def test_the_attempt_count_bounds_the_retry_loop(self):
+        """The option has to reach the loop, not just the attribute"""
+        import unittest.mock
+
+        self.bot.attempts = 2
+        calls = []
+
+        def failing(model, prompt):
+            calls.append(model)
+            return {"response": "no move here"}
+
+        with unittest.mock.patch("knightmare_llm.ollama") as fake:
+            fake.generate.side_effect = failing
+            board = chess.Board()
+            move = self.bot.get_best_move(board, max_time=600.0)
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn(move, board.legal_moves)
 
 
 if __name__ == "__main__":
