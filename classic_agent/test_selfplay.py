@@ -241,5 +241,93 @@ class TestDisableBook(unittest.TestCase):
             self.assertTrue(selfplay.parse_args().book)
 
 
+class TestGameFinished(unittest.TestCase):
+    """A drawn game must stop being played
+
+    is_game_over() says False for the fifty move rule and threefold
+    repetition, so a game that reached one carried on. Four of six sampled
+    games hit a claimable draw and then ran on to a checkmate, which the
+    harness recorded as a decisive result for a game that was drawn.
+    """
+
+    def test_a_live_game_is_not_finished(self):
+        self.assertFalse(selfplay.game_finished(chess.Board()))
+
+    def test_checkmate_finishes_it(self):
+        board = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1")
+        self.assertTrue(selfplay.game_finished(board))
+
+    def test_the_fifty_move_rule_finishes_it(self):
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 100 60")
+        self.assertFalse(board.is_game_over())
+        self.assertTrue(selfplay.game_finished(board))
+
+    def test_one_move_short_is_not_finished(self):
+        """is_game_over(claim_draw=True) is true here, one ply early"""
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 99 60")
+        self.assertTrue(board.is_game_over(claim_draw=True))
+        self.assertFalse(selfplay.game_finished(board))
+
+    def test_a_repetition_finishes_it(self):
+        board = chess.Board("4k3/8/8/8/8/8/8/R3K3 w - - 0 1")
+        for uci in ("a1a2", "e8e7", "a2a1", "e7e8") * 2:
+            board.push(chess.Move.from_uci(uci))
+        self.assertTrue(board.is_repetition(3))
+        self.assertTrue(selfplay.game_finished(board))
+
+    def test_a_repeating_game_is_scored_as_a_draw(self):
+        """The whole point: not played on until someone blunders"""
+
+        class Shuffler:
+            """Walks a knight out and back, repeating the position
+
+            The moves are legal from the opening position, so the game
+            really does repeat rather than falling through to whatever
+            move happens to come first.
+            """
+
+            WHITE = ["g1f3", "f3g1"]
+            BLACK = ["b8c6", "c6b8"]
+
+            def __init__(self):
+                self.count = 0
+
+            def get_move(self, board, seconds, depth):
+                script = self.WHITE if board.turn == chess.WHITE else self.BLACK
+                move = chess.Move.from_uci(script[self.count % len(script)])
+                self.count += 1
+                if move in board.legal_moves:
+                    return move
+                return next(iter(board.legal_moves), None)
+
+        result = selfplay.play_game(
+            Shuffler(), Shuffler(), [], depth=1, max_plies=200)
+        self.assertEqual(result, "1/2-1/2")
+
+    def test_the_draw_is_reached_long_before_the_ply_cap(self):
+        """Without the fix the game ran to the cap or to a checkmate"""
+
+        class Shuffler:
+            WHITE = ["g1f3", "f3g1"]
+            BLACK = ["b8c6", "c6b8"]
+
+            def __init__(self):
+                self.count = 0
+                self.plies = 0
+
+            def get_move(self, board, seconds, depth):
+                self.plies = len(board.move_stack)
+                script = self.WHITE if board.turn == chess.WHITE else self.BLACK
+                move = chess.Move.from_uci(script[self.count % len(script)])
+                self.count += 1
+                return move if move in board.legal_moves else next(
+                    iter(board.legal_moves), None)
+
+        white = Shuffler()
+        selfplay.play_game(white, Shuffler(), [], depth=1, max_plies=200)
+        # A threefold repetition arrives within a dozen plies of shuffling
+        self.assertLess(white.plies, 20)
+
+
 if __name__ == "__main__":
     unittest.main()
