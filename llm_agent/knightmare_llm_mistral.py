@@ -20,6 +20,11 @@ except ImportError:
 from datetime import datetime
 import json
 
+# Shared with the llama bot rather than copied: both need the same answer
+# to "which moves are worth putting in front of a model", and both live in
+# this directory, so there is no package boundary to cross.
+from knightmare_llm import moves_for_prompt
+
 # Source square, destination square and an optional promotion piece
 UCI_PATTERN = re.compile(r'[a-h][1-8][a-h][1-8][qrbn]?')
 
@@ -115,7 +120,12 @@ Try again. Reply with ONLY ONE legal move in UCI format."""
     
     def get_llm_move_numbered_list(self, board, legal_moves):
         """Strategy 3: Numbered list - pick a number"""
-        moves_list = "\n".join([f"{i+1}. {move}" for i, move in enumerate(legal_moves)])
+        # Ordered so that a model skimming the top of a long list still
+        # sees the captures and checks
+        moves_list = "\n".join(
+            f"{i+1}. {move}"
+            for i, move in enumerate(moves_for_prompt(board, limit=len(legal_moves)))
+        )
         
         prompt = f"""Choose the best chess move from this numbered list:
 
@@ -131,7 +141,9 @@ Reply with ONLY the move in UCI format (example: e2e4). Pick from the list above
     
     def get_llm_move_simplified(self, board, legal_moves):
         """Strategy 4: Simplified prompt focusing on just picking from list"""
-        legal_moves_str = ", ".join([str(move) for move in legal_moves[:10]])  # Limit to 10
+        # Ten moves out of forty is a heavy cut, so it has to keep the ones
+        # that matter: generation order used to hide most of the captures
+        legal_moves_str = ", ".join(str(move) for move in moves_for_prompt(board, limit=10))
         
         prompt = f"""Pick ONE move from this list: {legal_moves_str}
 
