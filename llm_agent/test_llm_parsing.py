@@ -18,6 +18,7 @@ from knightmare_llm import (
     moves_for_prompt,
     parse_move,
     parse_movetime,
+    replay_moves,
 )
 from knightmare_llm_mistral import KnightmareLLMRecovery, default_log_path
 
@@ -278,6 +279,68 @@ class TestMovesForPrompt(unittest.TestCase):
         before = board.fen()
         moves_for_prompt(board)
         self.assertEqual(board.fen(), before)
+
+
+class TestReplayMoves(unittest.TestCase):
+    """Replaying the move list a host sends with a position command
+
+    A move that will not apply used to be skipped and the rest played
+    anyway. That is worse than it sounds: the board silently stops being
+    the game the host described, and later moves can be legal in the wrong
+    position, so the engine analyses a game nobody is playing.
+    """
+
+    def test_a_clean_list_plays_through(self):
+        board = replay_moves(chess.Board(), "e2e4 e7e5 g1f3 b8c6")
+        self.assertEqual([m.uci() for m in board.move_stack],
+                         ["e2e4", "e7e5", "g1f3", "b8c6"])
+
+    def test_an_empty_list_leaves_the_board_alone(self):
+        self.assertEqual(replay_moves(chess.Board(), "").fen(),
+                         chess.STARTING_FEN)
+
+    def test_it_stops_at_an_illegal_move(self):
+        board = replay_moves(chess.Board(), "e2e4 e7e5 g1f3 e7e5 b8c6")
+        self.assertEqual([m.uci() for m in board.move_stack],
+                         ["e2e4", "e7e5", "g1f3"])
+
+    def test_it_stops_at_an_unreadable_move(self):
+        board = replay_moves(chess.Board(), "e2e4 zzz e7e5")
+        self.assertEqual([m.uci() for m in board.move_stack], ["e2e4"])
+
+    def test_skipping_would_have_played_a_different_game(self):
+        """Why stopping matters rather than being merely tidier
+
+        d7d5 is illegal after d7d6, and skipping it leaves White to move
+        again - so the White move that follows is perfectly legal, and the
+        result is a real-looking game the host never described. A skipped
+        move only stays harmless when the next move happens to be the same
+        colour, which is exactly what cannot be relied on.
+        """
+        text = "e2e4 d7d6 d7d5 g1f3"
+        stopped = replay_moves(chess.Board(), text)
+
+        skipping = chess.Board()
+        for uci in text.split():
+            move = chess.Move.from_uci(uci)
+            if move in skipping.legal_moves:
+                skipping.push(move)
+
+        self.assertNotEqual(stopped.fen(), skipping.fen())
+        self.assertEqual(len(stopped.move_stack), 2)
+        self.assertEqual(len(skipping.move_stack), 3)
+
+    def test_the_result_is_always_a_prefix_of_what_was_asked_for(self):
+        for text in ("e2e4 e7e5", "e2e4 zzz", "e2e4 e7e5 e7e5", "not a move"):
+            with self.subTest(text=text):
+                board = replay_moves(chess.Board(), text)
+                played = [m.uci() for m in board.move_stack]
+                self.assertEqual(played, text.split()[:len(played)])
+
+    def test_it_works_from_a_position_other_than_the_start(self):
+        start = chess.Board("8/8/4k3/8/8/8/4P3/4K3 w - - 0 1")
+        board = replay_moves(start, "e2e4 e6d6")
+        self.assertEqual([m.uci() for m in board.move_stack], ["e2e4", "e6d6"])
 
 
 if __name__ == "__main__":
