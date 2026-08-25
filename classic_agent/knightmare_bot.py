@@ -1274,6 +1274,30 @@ def parse_go(line, white_to_move=True):
     return time_limit, max_depth
 
 
+def replay_moves(board, uci_strings):
+    """Push the moves a position command carries onto the board
+
+    Stops at the first move that will not apply, rather than skipping it:
+    skipping leaves the board describing a game the host never sent, and a
+    later move of the opposite colour will often be legal in that wrong
+    position, so the mistake goes unnoticed. Says why it stopped, because
+    silently returning a short game is hard to diagnose from the outside.
+    """
+    for uci_str in uci_strings:
+        try:
+            move = chess.Move.from_uci(uci_str)
+        except ValueError:
+            print(f"info string could not read move {uci_str!r}, stopping replay",
+                  flush=True)
+            break
+        if move not in board.legal_moves:
+            print(f"info string {uci_str} is not legal here, stopping replay",
+                  flush=True)
+            break
+        board.push(move)
+    return board
+
+
 def parse_position(line):
     """Parse position command and return board"""
     board = chess.Board()
@@ -1282,18 +1306,11 @@ def parse_position(line):
     try:
         if "startpos" in parts:
             board = chess.Board()
-            
+
             if "moves" in parts:
                 moves_idx = parts.index("moves") + 1
-                for uci_str in parts[moves_idx:]:
-                    try:
-                        move = chess.Move.from_uci(uci_str)
-                    except ValueError:
-                        break
-                    if move not in board.legal_moves:
-                        break
-                    board.push(move)
-        
+                board = replay_moves(board, parts[moves_idx:])
+
         elif "fen" in parts:
             fen_idx = parts.index("fen") + 1
             fen_parts = []
@@ -1309,14 +1326,7 @@ def parse_position(line):
             
             if "moves" in parts:
                 moves_idx = parts.index("moves") + 1
-                for uci_str in parts[moves_idx:]:
-                    try:
-                        move = chess.Move.from_uci(uci_str)
-                    except ValueError:
-                        break
-                    if move not in board.legal_moves:
-                        break
-                    board.push(move)
+                board = replay_moves(board, parts[moves_idx:])
     except ValueError:
         # Unparseable FEN or command, fall back to the initial position
         board = chess.Board()
