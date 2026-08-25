@@ -120,6 +120,30 @@ The books also meant the first five full moves of every game were book
 moves rather than searched ones, so a search change had barely a third of
 each game to show itself in.
 
+A second and larger problem was found later: the game loop itself used
+`board.is_game_over()`, which is false for the fifty move rule and
+threefold repetition, so **a game that was already drawn kept being
+played** until it reached a checkmate or the 160 ply cap. Sampling six
+self play games, four of them hit a claimable draw and then ran on to a
+decisive finish that the harness recorded as a win:
+
+| Opening   | Recorded before | Plies | Correct result | Plies |
+| --------- | --------------- | ----- | -------------- | ----- |
+| start     | 0-1             | 118   | 1/2-1/2        | 61    |
+| e4 e5     | 0-1             | 118   | 1/2-1/2        | 61    |
+| d4 d5     | 1-0             | 91    | 1-0            | 91    |
+| Sicilian  | 1-0             | 109   | 1/2-1/2        | 84    |
+| French    | 0-1             | 98    | 0-1            | 98    |
+| Caro-Kann | 0-1             | 114   | 1/2-1/2        | 30    |
+
+Two thirds of those games were scored wrongly. Between identical engines
+the error is symmetric and mostly cancels in the average, which is why the
+50% sanity check still passed — but it inflates the variance a great deal,
+and between *different* engines there is no reason for it to cancel at all.
+Any margin recorded before this fix should be read as much softer than it
+looks. Games also finish in roughly half the plies now, so matches run
+faster.
+
 Use `--seconds` instead when the change was about speed. A faster search
 cannot change what a fixed-depth search returns, so ordering and pruning
 work only shows up under a clock.
