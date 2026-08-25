@@ -298,7 +298,12 @@ class KnightmareFast:
         if board.is_stalemate() or board.is_insufficient_material():
             return 0
 
-        if board.can_claim_fifty_moves():
+        # halfmove_clock rather than can_claim_fifty_moves(): that returns
+        # True one ply early, when the side to move *could* reach the rule
+        # with their move. The game is not drawn yet, and a win still on
+        # the board still wins - a mate delivered at clock 99 ends the game
+        # before the rule can be invoked. Scoring 0 here threw those away.
+        if board.halfmove_clock >= 100:
             return 0
 
         # A threefold repetition is a draw the opponent can claim, but
@@ -371,7 +376,8 @@ class KnightmareFast:
         """
         if board.is_game_over():
             return True
-        return board.can_claim_fifty_moves() or board.is_repetition(3)
+        # Matches the evaluation above, and the classic engine
+        return board.halfmove_clock >= 100 or board.is_repetition(3)
 
     def check_clock(self):
         """Abort the search if the budget has run out"""
