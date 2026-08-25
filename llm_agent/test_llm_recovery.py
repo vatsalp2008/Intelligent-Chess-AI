@@ -20,6 +20,9 @@ import unittest
 
 import chess
 
+import knightmare_llm
+import knightmare_llm_mistral
+
 import knightmare_llm_mistral as mistral
 
 
@@ -181,6 +184,47 @@ class TestLogging(RecoveryTestCase):
         board.push(chess.Move.from_uci("e2e4"))
         self.bot.get_best_move(board, max_time=10)
         self.assertGreater(self.bot.move_number, first)
+
+
+class TestPromptMoveList(unittest.TestCase):
+    """Both bots cut the move list, and both must cut it the same way
+
+    The recovery bot's simplified strategy shows only ten moves. In
+    generation order that hid every capture past the tenth move, so a
+    position with material to win could not be played well however good
+    the model was.
+    """
+
+    KIWIPETE = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+
+    def test_both_bots_share_one_ordering(self):
+        """Not copied, so they cannot drift apart"""
+        self.assertIs(knightmare_llm_mistral.moves_for_prompt,
+                      knightmare_llm.moves_for_prompt)
+
+    def test_a_ten_move_cut_still_shows_the_captures(self):
+        board = chess.Board(self.KIWIPETE)
+        shown = knightmare_llm.moves_for_prompt(board, limit=10)
+        forcing = [m for m in board.legal_moves
+                   if board.is_capture(m) or board.gives_check(m)]
+        self.assertTrue(forcing, "position should have forcing moves")
+        for move in forcing:
+            self.assertIn(move, shown, move.uci())
+
+    def test_generation_order_would_have_hidden_them(self):
+        """Records what the bug was, so the fix is not undone as pointless"""
+        board = chess.Board(self.KIWIPETE)
+        naive = list(board.legal_moves)[:10]
+        forcing = [m for m in board.legal_moves
+                   if board.is_capture(m) or board.gives_check(m)]
+        hidden = [m for m in forcing if m not in naive]
+        self.assertTrue(hidden, "the old ordering hid at least one forcing move")
+
+    def test_asking_for_every_move_returns_every_move(self):
+        board = chess.Board(self.KIWIPETE)
+        count = board.legal_moves.count()
+        self.assertEqual(len(knightmare_llm.moves_for_prompt(board, limit=count)),
+                         count)
 
 
 if __name__ == "__main__":
