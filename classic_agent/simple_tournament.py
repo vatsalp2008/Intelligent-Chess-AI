@@ -162,6 +162,18 @@ class ChessEngine:
             # Ignored the terminate, so stop it the hard way
             self.process.kill()
 
+def game_finished(board):
+    """True when the game is over, counting the draws a player may claim
+
+    is_game_over() alone says False for the fifty move rule and threefold
+    repetition, so a drawn game carried on and could end in checkmate,
+    recorded as a decisive result for a game that was in fact drawn.
+    """
+    if board.is_game_over():
+        return True
+    return board.halfmove_clock >= 100 or board.is_repetition(3)
+
+
 def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
     """Play a single game between two engines
 
@@ -177,7 +189,7 @@ def play_game(white_engine, black_engine, max_moves=200, time_per_move=1000):
     node = game
     move_count = 0
     
-    while not board.is_game_over() and move_count < max_moves:
+    while not game_finished(board) and move_count < max_moves:
         # Determine current engine
         current_engine = white_engine if board.turn == chess.WHITE else black_engine
         

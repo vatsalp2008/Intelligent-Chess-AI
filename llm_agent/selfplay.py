@@ -77,13 +77,29 @@ def disable_book(bot):
         bot.use_book = False
 
 
+def game_finished(board):
+    """True when the game is over, counting the draws a player may claim
+
+    is_game_over() alone says False for the fifty move rule and threefold
+    repetition, so a game that reached one carried on being played and
+    could then end in checkmate - recorded as a decisive result for a game
+    that was in fact drawn.
+
+    Checked directly rather than through is_game_over(claim_draw=True),
+    which is true one ply early.
+    """
+    if board.is_game_over():
+        return True
+    return board.halfmove_clock >= 100 or board.is_repetition(3)
+
+
 def play_game(white_bot, black_bot, opening, depth):
     """Play one game and return a PGN style result string"""
     board = chess.Board()
     for uci in opening:
         board.push(chess.Move.from_uci(uci))
 
-    while not board.is_game_over() and len(board.move_stack) < MAX_PLIES:
+    while not game_finished(board) and len(board.move_stack) < MAX_PLIES:
         bot = white_bot if board.turn == chess.WHITE else black_bot
         move = ask_move(bot, board, depth)
 

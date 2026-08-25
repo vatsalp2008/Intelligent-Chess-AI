@@ -78,13 +78,31 @@ def find_stockfish():
     return None
 
 
+def game_finished(board):
+    """True when the game is over, counting the draws a player may claim
+
+    is_game_over() alone says False for the fifty move rule and threefold
+    repetition, so a game that reached one carried on being played. Three
+    of five sampled self play games hit a claimable draw and then went on
+    to end in checkmate, which the harness recorded as a decisive result
+    for a game that was in fact drawn.
+
+    Checked directly rather than through is_game_over(claim_draw=True),
+    which is true one ply early: that asks can_claim_fifty_moves(), which
+    reports that the side to move *could* reach the rule with their move.
+    """
+    if board.is_game_over():
+        return True
+    return board.halfmove_clock >= 100 or board.is_repetition(3)
+
+
 def play_game(bot, engine, opening, our_colour, skill_depth):
     """One game; returns 1.0, 0.5 or 0.0 from our engine's point of view"""
     board = chess.Board()
     for uci in opening:
         board.push(chess.Move.from_uci(uci))
 
-    while not board.is_game_over() and len(board.move_stack) < MAX_PLIES:
+    while not game_finished(board) and len(board.move_stack) < MAX_PLIES:
         if board.turn == our_colour:
             move = bot.get_move(board, NO_TIME_LIMIT, OUR_DEPTH)
             if move is None or move not in board.legal_moves:
