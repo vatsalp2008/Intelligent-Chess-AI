@@ -360,6 +360,19 @@ class KnightmareFast:
         move_scores.sort(key=lambda x: x[1], reverse=True)
         return [move for move, _ in move_scores]
     
+    @staticmethod
+    def game_over(board):
+        """True when there is nothing left to search from here
+
+        is_game_over() alone says False for the fifty move rule and
+        threefold repetition, because both need a claim. The evaluation
+        already scores those as drawn, so searching on from one only
+        confirms a zero it already knew.
+        """
+        if board.is_game_over():
+            return True
+        return board.can_claim_fifty_moves() or board.is_repetition(3)
+
     def check_clock(self):
         """Abort the search if the budget has run out"""
         if self.deadline is None:
@@ -378,7 +391,7 @@ class KnightmareFast:
         self.nodes += 1
         self.check_clock()
 
-        if board.is_game_over():
+        if self.game_over(board):
             return self.evaluate_board(board, ply)
 
         stand_pat = self.evaluate_board(board, ply)
@@ -422,8 +435,8 @@ class KnightmareFast:
         self.nodes += 1
         self.check_clock()
 
-        # Terminal conditions
-        if board.is_game_over():
+        # Terminal conditions, counting the draws that need claiming
+        if self.game_over(board):
             return self.evaluate_board(board, ply), None
 
         if depth == 0:
