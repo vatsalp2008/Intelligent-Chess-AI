@@ -12,7 +12,13 @@ import unittest
 
 import chess
 
-from knightmare_llm import DEFAULT_MOVE_TIME, parse_move, parse_movetime
+from knightmare_llm import (
+    DEFAULT_MOVE_TIME,
+    MAX_MOVES_SHOWN,
+    moves_for_prompt,
+    parse_move,
+    parse_movetime,
+)
 from knightmare_llm_mistral import KnightmareLLMRecovery, default_log_path
 
 
@@ -183,6 +189,95 @@ class TestLogPath(unittest.TestCase):
             finally:
                 del os.environ["KNIGHTMARE_LOG_DIR"]
             self.assertTrue(path.startswith(tmp))
+
+
+class TestMovesForPrompt(unittest.TestCase):
+    """Which moves the model is shown, when the list has to be cut
+
+    The list used to be cut in python-chess generation order, which is by
+    piece and square and has nothing to do with how good a move is. In the
+    standard "kiwipete" position that hid three of the eight captures,
+    including the one the search engine picks, so the model could not have
+    chosen it however well it played.
+    """
+
+    KIWIPETE = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+    MIDDLEGAME = "r2q1rk1/pb1nbppp/1p2pn2/2pp4/2PP4/1PN1PN2/PB3PPP/R2QKB1R w KQ - 0 10"
+
+    def forcing(self, board):
+        return [m for m in board.legal_moves
+                if board.is_capture(m) or board.gives_check(m) or m.promotion]
+
+    def test_it_never_offers_more_than_the_limit(self):
+        board = chess.Board(self.KIWIPETE)
+        self.assertEqual(len(moves_for_prompt(board)), MAX_MOVES_SHOWN)
+
+    def test_a_short_list_is_offered_whole(self):
+        board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
+        self.assertEqual(len(moves_for_prompt(board)),
+                         board.legal_moves.count())
+
+    def test_every_move_offered_is_legal(self):
+        board = chess.Board(self.KIWIPETE)
+        for move in moves_for_prompt(board):
+            self.assertIn(move, board.legal_moves)
+
+    def test_no_forcing_move_is_hidden(self):
+        """The point of the change: captures and checks survive the cut"""
+        for fen in (self.KIWIPETE, self.MIDDLEGAME):
+            with self.subTest(fen=fen):
+                board = chess.Board(fen)
+                shown = moves_for_prompt(board)
+                for move in self.forcing(board):
+                    self.assertIn(move, shown, move.uci())
+
+    def test_captures_come_before_quiet_moves(self):
+        board = chess.Board(self.KIWIPETE)
+        shown = moves_for_prompt(board)
+        first_quiet = next(
+            i for i, m in enumerate(shown)
+            if not (board.is_capture(m) or board.gives_check(m) or m.promotion)
+        )
+        last_forcing = max(
+            i for i, m in enumerate(shown)
+            if board.is_capture(m) or board.gives_check(m) or m.promotion
+        )
+        self.assertLess(last_forcing, first_quiet)
+
+    def test_the_bigger_capture_comes_first(self):
+        """Taking a queen is offered ahead of taking a pawn"""
+        board = chess.Board("4k3/8/8/3q4/4P3/8/6B1/4K3 w - - 0 1")
+        shown = [m.uci() for m in moves_for_prompt(board)]
+        self.assertEqual(shown[0], "e4d5")
+
+    def test_an_en_passant_capture_is_ranked_as_a_capture(self):
+        """Nothing stands on the target square, but a pawn is still taken"""
+        board = chess.Board("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1")
+        capture = chess.Move.from_uci("e5d6")
+        self.assertTrue(board.is_en_passant(capture))
+        self.assertEqual(moves_for_prompt(board)[0], capture)
+
+    def test_promotions_are_offered(self):
+        board = chess.Board("4k3/P7/8/8/8/8/8/4K3 w - - 0 1")
+        shown = moves_for_prompt(board)
+        self.assertIn(chess.Move.from_uci("a7a8q"), shown)
+
+    def test_the_order_is_the_same_every_time(self):
+        """Retrying must not reshuffle the prompt under the model"""
+        board = chess.Board(self.KIWIPETE)
+        first = [m.uci() for m in moves_for_prompt(board)]
+        for _ in range(5):
+            self.assertEqual([m.uci() for m in moves_for_prompt(board)], first)
+
+    def test_a_finished_game_offers_nothing(self):
+        board = chess.Board("4R1k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1")
+        self.assertEqual(moves_for_prompt(board), [])
+
+    def test_the_board_is_not_disturbed(self):
+        board = chess.Board(self.KIWIPETE)
+        before = board.fen()
+        moves_for_prompt(board)
+        self.assertEqual(board.fen(), before)
 
 
 if __name__ == "__main__":
