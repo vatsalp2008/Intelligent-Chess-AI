@@ -35,6 +35,82 @@ MAX_MOVES_SHOWN = 15
 # How many times to ask before falling back to a random legal move
 MAX_ATTEMPTS = 3
 
+# The options a host may set. A host only offers what the engine
+# advertises, so anything missing here can never be set.
+#
+# Model is the one worth exposing: comparing two models is the whole point
+# of this bot, and doing it through an environment variable means
+# restarting the process between runs.
+UCI_OPTIONS = [
+    ("Model", "string", DEFAULT_MODEL),
+    ("Attempts", "spin", MAX_ATTEMPTS, 1, 10),
+]
+
+
+def option_lines():
+    """The `option` lines to send in reply to `uci`"""
+    lines = []
+    for name, kind, default, *bounds in UCI_OPTIONS:
+        text = f"option name {name} type {kind} default {default}"
+        if bounds:
+            text += f" min {bounds[0]} max {bounds[1]}"
+        lines.append(text)
+    return lines
+
+
+def parse_setoption(line):
+    """The (name, value) a setoption command carries, or None
+
+    The wire format is `setoption name <name> [value <value>]`, and both
+    parts may contain spaces, so this splits on the keywords rather than on
+    whitespace.
+    """
+    parts = line.split()
+    if len(parts) < 3 or parts[0] != "setoption" or parts[1] != "name":
+        return None
+
+    if "value" in parts[3:]:
+        # Searched from past the first name token, so an option actually
+        # called "value" keeps its name instead of truncating to nothing
+        split_at = parts.index("value", 3)
+        name = " ".join(parts[2:split_at])
+        value = " ".join(parts[split_at + 1:])
+    else:
+        name = " ".join(parts[2:])
+        value = None
+
+    return (name, value) if name else None
+
+
+def apply_option(bot, name, value):
+    """Set one option on the bot, returning what happened as text
+
+    Unknown names are reported rather than ignored: a host that has
+    misspelled one otherwise sees no sign its setting did nothing.
+    """
+    known = {entry[0].lower(): entry for entry in UCI_OPTIONS}
+    entry = known.get(name.strip().lower())
+    if entry is None:
+        return f"ignoring unknown option {name}"
+
+    if entry[0] == "Model":
+        wanted = (value or "").strip()
+        if not wanted:
+            return "Model needs a name"
+        bot.model_name = wanted
+        return f"Model set to {wanted}"
+
+    if entry[0] == "Attempts":
+        try:
+            attempts = int(value)
+        except (TypeError, ValueError):
+            return f"Attempts needs a number, not {value!r}"
+        _, _, _, low, high = entry
+        bot.attempts = max(low, min(attempts, high))
+        return f"Attempts set to {bot.attempts}"
+
+    return f"ignoring unknown option {name}"
+
 
 # Rough piece worth, used only to rank captures for the prompt. Kept local
 # rather than imported from the search engine: this bot is a standalone
@@ -108,6 +184,8 @@ def parse_move(text, legal_moves):
 class LLMChessBot:
     def __init__(self, model_name=None):
         self.model_name = model_name or os.environ.get("KNIGHTMARE_MODEL", DEFAULT_MODEL)
+        # Per instance, so a host can change it without restarting
+        self.attempts = MAX_ATTEMPTS
 
     def get_best_move(self, board, max_time=DEFAULT_MOVE_TIME):
         """Ask the model for a move, falling back to a random legal one
@@ -148,7 +226,7 @@ Board:
 Reply with just the move (like e2e4)."""
         
         # Try a few times if it fails
-        for attempt in range(MAX_ATTEMPTS):
+        for attempt in range(self.attempts):
             # Another round trip would likely blow the budget
             if attempt > 0 and time.time() - start_time > max_time:
                 print(
@@ -218,6 +296,8 @@ def uci(msg):
     if msg == "uci":
         print("id name LLM Chess Bot")
         print("id author Vatsal Patel")
+        for option in option_lines():
+            print(option)
         print("uciok")
         sys.stdout.flush()
         
@@ -227,6 +307,22 @@ def uci(msg):
         print("readyok")
         sys.stdout.flush()
         
+    elif msg.startswith("setoption"):
+        if global_bot is None:
+            global_bot = LLMChessBot()
+        parsed = parse_setoption(msg)
+        if parsed is None:
+            print(f"info string could not read: {msg}")
+        else:
+            print(f"info string {apply_option(global_bot, *parsed)}")
+        sys.stdout.flush()
+
+    elif msg in ("stop", "ponderhit"):
+        # The model round trip happens on this thread, so by the time
+        # either can be read the move has already been sent
+        print("info string nothing in progress to stop")
+        sys.stdout.flush()
+
     elif msg == "ucinewgame":
         global_board = chess.Board()
         
