@@ -27,11 +27,57 @@ DEFAULT_MODEL = "llama3.2"
 # Seconds allowed for model round trips when the host sends no movetime
 DEFAULT_MOVE_TIME = 2.0
 
-# How many legal moves to offer the model at once
+# How many legal moves to offer the model at once. A long list crowds the
+# prompt and the model starts ignoring it, so the list is cut - which makes
+# the order it is cut in matter, see moves_for_prompt.
 MAX_MOVES_SHOWN = 15
 
 # How many times to ask before falling back to a random legal move
 MAX_ATTEMPTS = 3
+
+
+# Rough piece worth, used only to rank captures for the prompt. Kept local
+# rather than imported from the search engine: this bot is a standalone
+# script and does not otherwise depend on it.
+CAPTURE_WORTH = {
+    chess.PAWN: 1,
+    chess.KNIGHT: 3,
+    chess.BISHOP: 3,
+    chess.ROOK: 5,
+    chess.QUEEN: 9,
+    chess.KING: 0,
+}
+
+
+def moves_for_prompt(board, limit=MAX_MOVES_SHOWN):
+    """The moves to offer the model, most interesting first
+
+    The list has to be cut somewhere, and it used to be cut in whatever
+    order python-chess generated the moves, which is by piece and square.
+    That silently hid material: in the standard "kiwipete" test position
+    three of the eight captures fell outside the first fifteen moves,
+    including the one the search engine picks. Captures, checks and
+    promotions go first now, so a cut list still contains the moves worth
+    considering.
+    """
+    def interest(move):
+        score = 0
+        if board.is_capture(move):
+            victim = board.piece_at(move.to_square)
+            # An empty target square means an en passant capture, which
+            # takes a pawn even though nothing stands on the square
+            worth = CAPTURE_WORTH.get(victim.piece_type, 0) if victim else 1
+            score += 100 + worth
+        if move.promotion:
+            score += 90
+        if board.gives_check(move):
+            score += 50
+        return score
+
+    # Sorted rather than partially selected, so the order is stable for a
+    # given position and the prompt does not change between attempts
+    ordered = sorted(board.legal_moves, key=lambda m: (-interest(m), m.uci()))
+    return ordered[:limit]
 
 
 def parse_move(text, legal_moves):
@@ -90,8 +136,8 @@ class LLMChessBot:
                 return move
             board.pop()
 
-        # Limit moves shown to avoid overwhelming the LLM
-        moves_to_show = legal_moves[:MAX_MOVES_SHOWN]
+        # Cut the list, but cut it so the interesting moves survive
+        moves_to_show = moves_for_prompt(board)
         legal_moves_str = ", ".join([str(move) for move in moves_to_show])
         
         prompt = f"""Pick ONE move from this list: {legal_moves_str}
