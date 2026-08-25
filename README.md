@@ -458,6 +458,29 @@ An experimental agent that prompts local LLMs to play chess.
 *   **Prompt Engineering**: Explores different prompting strategies (UCI vs Algebraic).
 *   **Resiliency**: Implements retry logic for invalid LLM moves.
 
+### Which moves the model gets to see
+
+A long move list crowds the prompt and models start ignoring it, so both
+bots cut it — fifteen moves for the llama bot, ten for one of the recovery
+bot's strategies. The cut was originally taken in whatever order
+python-chess generates moves, which is by piece and square and unrelated to
+how good a move is.
+
+That silently removed material from consideration. In the standard
+"kiwipete" test position there are eight captures and checks; the first ten
+moves in generation order contain none of the last three, including `e2a6`,
+which is the move the search engine picks. The model could not have played
+it however well it reasoned, because it was never shown it.
+
+Captures, checks and promotions are now sorted to the front, with bigger
+captures first, so a cut list still contains every forcing move in all the
+positions tested. The ordering is deterministic, so retrying does not
+reshuffle the prompt underneath the model.
+
+This is the kind of defect no amount of testing the parser would have
+found: every move the bot played was legal and every reply parsed cleanly.
+The bug was in what the question left out.
+
 ### Usage
 
 **Run the Tournament**
